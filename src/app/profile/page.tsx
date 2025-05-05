@@ -3,6 +3,7 @@
   import React, { useState, useEffect } from 'react';
   import { useForm } from 'react-hook-form';
   import { zodResolver } from '@hookform/resolvers/zod';
+  import { z } from 'zod'; // Ensure z is imported
   import { useAuth } from '@/hooks/useAuth';
   import { useFirestoreDocument } from '@/hooks/useFirestoreDocument';
   import { getFirebase } from '@/firebase';
@@ -20,7 +21,7 @@
   import { Skeleton } from '@/components/ui/skeleton';
   import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
   import { AlertCircle, CheckCircle } from "lucide-react"
-  import { AuthCheck } from '@/components/auth/AuthCheck'; // Import AuthCheck
+  import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar" // Import Avatar components
  import {
    AlertDialog,
    AlertDialogAction,
@@ -32,6 +33,7 @@
    AlertDialogTitle,
    AlertDialogTrigger,
  } from "@/components/ui/alert-dialog"
+ import { useRouter } from 'next/navigation';
 
 
  // Validation Schema for profile update
@@ -54,9 +56,9 @@
  type PasswordUpdateFormValues = z.infer<typeof PasswordUpdateSchema>;
 
  export default function ProfilePage() {
-   const { user } = useAuth(); // Only need user from useAuth here
+   const { user, loading: authLoading } = useAuth(); // Get user and loading state
    const { firestore } = getFirebase();
-   // Pass user?.uid directly to the hook
+   const router = useRouter();
    const { data: userData, loading: userLoading, error: userError } = useFirestoreDocument<User>(
      'users',
      user?.uid, // Pass uid directly
@@ -86,22 +88,28 @@
 
      // Effect to reset form when userData or user changes
      useEffect(() => {
-       if (userData?.profilePreferences) {
+       // Prioritize userData if available and not loading
+       if (userData?.profilePreferences && !userLoading) {
          profileForm.reset({
            displayName: userData.profilePreferences.displayName || user?.displayName || '',
            avatar: userData.profilePreferences.avatar || user?.photoURL || '',
          });
-       } else if (user && !userLoading) { // Use auth data if firestore data is loading/missing prefs
+       } else if (user && !authLoading) { // Use auth data if firestore data is missing or still loading
          profileForm.reset({
            displayName: user.displayName || '',
            avatar: user.photoURL || '',
          });
+       } else if (!user && !authLoading) { // Reset if user logs out
+          profileForm.reset({ displayName: '', avatar: '' });
        }
-     }, [userData, user, userLoading, profileForm]);
+     }, [userData, user, authLoading, userLoading, profileForm]);
 
 
      const onProfileSubmit = async (values: ProfileUpdateFormValues) => {
-       if (!user) return;
+       if (!user) {
+         toast({ title: 'Error', description: 'You must be logged in to update your profile.', variant: 'destructive' });
+         return;
+        }
        setIsLoading(true);
 
        const preferencesToUpdate: Partial<ProfilePreferences> = {}; // Use Partial<>
@@ -149,7 +157,7 @@
 
       const handlePasswordUpdate = async (values: PasswordUpdateFormValues) => {
         if (!user || !user.email) {
-            toast({ title: 'Error', description: 'User not found.', variant: 'destructive' });
+            toast({ title: 'Error', description: 'You must be logged in to change your password.', variant: 'destructive' });
             return;
         }
          setIsPasswordLoading(true);
@@ -201,149 +209,166 @@
       return '?';
     };
 
+    // Handle case where user is not logged in
+    if (!authLoading && !user) {
+      return (
+         <AppLayout>
+             <div className="container mx-auto p-4 md:p-8">
+               <h1 className="text-3xl font-bold text-foreground mb-8">Profile & Settings</h1>
+                <Alert variant="default" className="bg-card">
+                   <AlertCircle className="h-4 w-4" />
+                   <AlertTitle>Not Logged In</AlertTitle>
+                   <AlertDescription>
+                     Please <Button variant="link" className="p-0 h-auto" onClick={() => router.push('/login')}>login</Button> to view and edit your profile.
+                   </AlertDescription>
+                 </Alert>
+             </div>
+          </AppLayout>
+       )
+     }
+
 
    return (
-     // Wrap the content with AuthCheck
-     <AuthCheck redirectTo="/login">
-       <AppLayout>
-         <div className="container mx-auto p-4 md:p-8">
-           <h1 className="text-3xl font-bold text-foreground mb-8">Profile & Settings</h1>
+     // Removed AuthCheck wrapper
+     <AppLayout>
+       <div className="container mx-auto p-4 md:p-8">
+         <h1 className="text-3xl font-bold text-foreground mb-8">Profile & Settings</h1>
 
-            {userLoading ? ( // Use userLoading specifically for profile data skeleton
-               <div className="space-y-6">
-                  <Skeleton className="h-10 w-1/3" />
-                  <Skeleton className="h-64 w-full rounded-lg" />
-                  <Skeleton className="h-64 w-full rounded-lg" />
-               </div>
-             ) : userError ? (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Error Loading Profile</AlertTitle>
-                  <AlertDescription>
-                    There was an issue loading your profile data. Please try again later.
-                  </AlertDescription>
-                </Alert>
-             ) : (
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Profile Preferences Card */}
-               <Card>
-                 <CardHeader>
-                   <CardTitle>Profile Preferences</CardTitle>
-                   <CardDescription>Update your display name and avatar.</CardDescription>
-                 </CardHeader>
-                 <Form {...profileForm}>
-                   <form onSubmit={profileForm.handleSubmit(onProfileSubmit)}>
-                     <CardContent className="space-y-4">
-                       <FormField
-                         control={profileForm.control}
-                         name="displayName"
-                         render={({ field }) => (
-                           <FormItem>
-                             <FormLabel>Display Name</FormLabel>
-                             <FormControl>
-                               <Input placeholder="Your display name" {...field} disabled={isLoading} />
-                             </FormControl>
-                             <FormMessage />
-                           </FormItem>
-                         )}
-                       />
-                        <FormField
-                          control={profileForm.control}
-                          name="avatar"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Avatar URL</FormLabel>
-                              <FormControl>
-                                 <div className="flex items-center gap-2">
-                                  <Input
-                                     placeholder="https://example.com/avatar.png"
-                                     {...field}
-                                     disabled={isLoading}
-                                   />
-                                  {(field.value || user?.photoURL) && ( // Show preview from field or auth
-                                    <Avatar className="h-10 w-10">
-                                      <AvatarImage src={field.value || user?.photoURL || undefined} alt="Avatar Preview" data-ai-hint="avatar preview"/>
-                                       <AvatarFallback>{getInitials()}</AvatarFallback>
-                                    </Avatar>
-                                   )}
-                                </div>
-                              </FormControl>
-                               <FormDescription>Enter the URL of your desired avatar image.</FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                     </CardContent>
-                     <CardFooter>
-                       <Button type="submit" disabled={isLoading || !profileForm.formState.isDirty}>
-                         {isLoading ? 'Saving...' : 'Save Preferences'}
-                       </Button>
-                     </CardFooter>
-                   </form>
-                 </Form>
-               </Card>
-
-               {/* Change Password Card */}
-               <Card>
-                 <CardHeader>
-                   <CardTitle>Change Password</CardTitle>
-                   <CardDescription>Update your account password.</CardDescription>
-                 </CardHeader>
-                  <Form {...passwordForm}>
-                   <form onSubmit={passwordForm.handleSubmit(handlePasswordUpdate)}>
-                     <CardContent className="space-y-4">
-                        <FormField
-                          control={passwordForm.control}
-                          name="currentPassword"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Current Password</FormLabel>
-                              <FormControl>
-                                <Input type="password" placeholder="Enter your current password" {...field} disabled={isPasswordLoading} />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                       <FormField
-                         control={passwordForm.control}
-                         name="newPassword"
-                         render={({ field }) => (
-                           <FormItem>
-                             <FormLabel>New Password</FormLabel>
-                             <FormControl>
-                               <Input type="password" placeholder="Enter new password" {...field} disabled={isPasswordLoading} />
-                             </FormControl>
-                             <FormMessage />
-                           </FormItem>
-                         )}
-                       />
-                       <FormField
-                         control={passwordForm.control}
-                         name="confirmPassword"
-                         render={({ field }) => (
-                           <FormItem>
-                             <FormLabel>Confirm New Password</FormLabel>
-                             <FormControl>
-                               <Input type="password" placeholder="Confirm new password" {...field} disabled={isPasswordLoading} />
-                             </FormControl>
-                             <FormMessage />
-                           </FormItem>
-                         )}
-                       />
-                     </CardContent>
-                     <CardFooter>
-                       <Button type="submit" disabled={isPasswordLoading}>
-                         {isPasswordLoading ? 'Updating...' : 'Update Password'}
-                       </Button>
-                     </CardFooter>
-                   </form>
-                 </Form>
-               </Card>
+          {/* Show skeleton only when auth OR firestore data is loading */}
+          {(authLoading || userLoading) ? (
+             <div className="space-y-6">
+                <Skeleton className="h-10 w-1/3" />
+                <Skeleton className="h-64 w-full rounded-lg" />
+                <Skeleton className="h-64 w-full rounded-lg" />
              </div>
-             )}
-         </div>
-       </AppLayout>
-     </AuthCheck>
+           ) : userError ? ( // Show error if Firestore loading failed
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error Loading Profile</AlertTitle>
+                <AlertDescription>
+                  There was an issue loading your profile data. Please try again later.
+                </AlertDescription>
+              </Alert>
+           ) : ( // Render content if not loading and no error
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Profile Preferences Card */}
+             <Card>
+               <CardHeader>
+                 <CardTitle>Profile Preferences</CardTitle>
+                 <CardDescription>Update your display name and avatar.</CardDescription>
+               </CardHeader>
+               <Form {...profileForm}>
+                 <form onSubmit={profileForm.handleSubmit(onProfileSubmit)}>
+                   <CardContent className="space-y-4">
+                     <FormField
+                       control={profileForm.control}
+                       name="displayName"
+                       render={({ field }) => (
+                         <FormItem>
+                           <FormLabel>Display Name</FormLabel>
+                           <FormControl>
+                             <Input placeholder="Your display name" {...field} disabled={isLoading} />
+                           </FormControl>
+                           <FormMessage />
+                         </FormItem>
+                       )}
+                     />
+                      <FormField
+                        control={profileForm.control}
+                        name="avatar"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Avatar URL</FormLabel>
+                            <FormControl>
+                               <div className="flex items-center gap-2">
+                                <Input
+                                   placeholder="https://example.com/avatar.png"
+                                   {...field}
+                                   disabled={isLoading}
+                                 />
+                                {(field.value || user?.photoURL) && ( // Show preview from field or auth
+                                  <Avatar className="h-10 w-10">
+                                    <AvatarImage src={field.value || user?.photoURL || undefined} alt="Avatar Preview" data-ai-hint="profile picture"/>
+                                     <AvatarFallback>{getInitials()}</AvatarFallback>
+                                  </Avatar>
+                                 )}
+                              </div>
+                            </FormControl>
+                             <FormDescription>Enter the URL of your desired avatar image.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                   </CardContent>
+                   <CardFooter>
+                     <Button type="submit" disabled={isLoading || !profileForm.formState.isDirty}>
+                       {isLoading ? 'Saving...' : 'Save Preferences'}
+                     </Button>
+                   </CardFooter>
+                 </form>
+               </Form>
+             </Card>
+
+             {/* Change Password Card */}
+             <Card>
+               <CardHeader>
+                 <CardTitle>Change Password</CardTitle>
+                 <CardDescription>Update your account password.</CardDescription>
+               </CardHeader>
+                <Form {...passwordForm}>
+                 <form onSubmit={passwordForm.handleSubmit(handlePasswordUpdate)}>
+                   <CardContent className="space-y-4">
+                      <FormField
+                        control={passwordForm.control}
+                        name="currentPassword"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Current Password</FormLabel>
+                            <FormControl>
+                              <Input type="password" placeholder="Enter your current password" {...field} disabled={isPasswordLoading} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                     <FormField
+                       control={passwordForm.control}
+                       name="newPassword"
+                       render={({ field }) => (
+                         <FormItem>
+                           <FormLabel>New Password</FormLabel>
+                           <FormControl>
+                             <Input type="password" placeholder="Enter new password" {...field} disabled={isPasswordLoading} />
+                           </FormControl>
+                           <FormMessage />
+                         </FormItem>
+                       )}
+                     />
+                     <FormField
+                       control={passwordForm.control}
+                       name="confirmPassword"
+                       render={({ field }) => (
+                         <FormItem>
+                           <FormLabel>Confirm New Password</FormLabel>
+                           <FormControl>
+                             <Input type="password" placeholder="Confirm new password" {...field} disabled={isPasswordLoading} />
+                           </FormControl>
+                           <FormMessage />
+                         </FormItem>
+                       )}
+                     />
+                   </CardContent>
+                   <CardFooter>
+                     <Button type="submit" disabled={isPasswordLoading}>
+                       {isPasswordLoading ? 'Updating...' : 'Update Password'}
+                     </Button>
+                   </CardFooter>
+                 </form>
+               </Form>
+             </Card>
+           </div>
+           )}
+       </div>
+     </AppLayout>
    );
  }
