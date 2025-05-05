@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow public read access to all collections.
+    // Warning: Remove or restrict this rule in production for sensitive data.
+    match /{document=**} {
+      allow read: if true;
+    }
+
+    // Rules for the 'users' collection.
+    match /users/{userId} {
+      // Allow users to read their own profile data.
+      allow get: if request.auth != null && request.auth.uid == userId;
+
+      // Allow users to create their profile if authenticated.
+      allow create: if request.auth != null && request.auth.uid == userId;
+
+      // Allow users to update their own profile data.
+      allow update: if request.auth != null && request.auth.uid == userId;
+
+      // Allow users to delete their own profile data.
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Rules for the 'games' collection.
+    match /games/{gameId} {
+      // Allow authenticated users to read games they own.
+      allow get: if request.auth != null && resource.data.userId == request.auth.uid;
+
+      // Allow authenticated users to create new games.
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+
+      // Allow authenticated users to update their own games.
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+
+      // Allow authenticated users to delete their own games.
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // Rules for the 'friendRequests' collection.
+    match /friendRequests/{friendRequestId} {
+      // Allow authenticated users to create friend requests.
+      allow create: if request.auth != null && request.resource.data.requesterId == request.auth.uid;
+
+      // Allow authenticated users to read friend requests where they are the requester or recipient.
+      allow get: if request.auth != null && (resource.data.requesterId == request.auth.uid || resource.data.recipientId == request.auth.uid);
+
+      // Allow authenticated users to update friend requests where they are the recipient (e.g., accept/reject).
+      allow update: if request.auth != null && resource.data.recipientId == request.auth.uid;
+
+      // No delete rule for friend requests.
+    }
+  }
+}

@@ -1,0 +1,228 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "description": "Represents a user account in the MineVerse application.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity. The specific format and generation strategy depend on the target database implementation."
+        },
+        "username": {
+          "type": "string",
+          "description": "The user's chosen username."
+        },
+        "password": {
+          "type": "string",
+          "description": "The user's password (should be stored securely using hashing and salting)."
+        },
+        "profilePreferences": {
+          "type": "object",
+          "description": "User-defined preferences for their profile (e.g., display name, avatar)."
+        },
+        "friendCodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Array of friend codes associated with the user."
+        },
+        "friendIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Array of identifiers for related User entities (friends). (Relationship: User N:N User)"
+        }
+      },
+      "required": [
+        "id",
+        "username",
+        "password"
+      ]
+    },
+    "Game": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Game",
+      "description": "Represents a single Minesweeper game.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Game entity. The specific format and generation strategy depend on the target database implementation."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the unique identifier of the User entity who played this game. (Relationship: User 1:N Games)"
+        },
+        "startTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The date and time the game started."
+        },
+        "endTime": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "description": "The date and time the game ended, or null if the game is not yet finished."
+        },
+        "gameState": {
+          "type": "string",
+          "description": "A serialized representation of the game board's state. The specific implementation of this field is database-dependent."
+        },
+        "difficulty": {
+          "type": "string",
+          "description": "The difficulty level of the game (e.g., easy, medium, hard)."
+        },
+        "moves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp of the move."
+              },
+              "action": {
+                "type": "string",
+                "description": "The type of action (e.g., click, flag)."
+              },
+              "x": {
+                "type": "integer",
+                "description": "The X coordinate of the move."
+              },
+              "y": {
+                "type": "integer",
+                "description": "The Y coordinate of the move."
+              }
+            },
+            "required": [
+              "timestamp",
+              "action",
+              "x",
+              "y"
+            ]
+          },
+          "description": "Array of moves made during the game."
+        },
+        "result": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The result of the game (e.g., won, lost, quit), or null if the game is still in progress."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "startTime",
+        "gameState",
+        "difficulty"
+      ]
+    },
+    "FriendRequest": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "FriendRequest",
+      "description": "Represents a friend request between two users.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the FriendRequest entity. The specific format and generation strategy depend on the target database implementation."
+        },
+        "requesterId": {
+          "type": "string",
+          "description": "Reference to the unique identifier of the User entity who sent the friend request. (Relationship: User 1:N FriendRequests [as requester])"
+        },
+        "recipientId": {
+          "type": "string",
+          "description": "Reference to the unique identifier of the User entity who received the friend request. (Relationship: User 1:N FriendRequests [as recipient])"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "accepted",
+            "rejected"
+          ],
+          "description": "The status of the friend request."
+        }
+      },
+      "required": [
+        "id",
+        "requesterId",
+        "recipientId",
+        "status"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "google.com",
+      "anonymous"
+    ],
+    "rationales": {
+      "providers": "The application requires users to create a username and password, so password authentication is necessary. Google sign-in provides a convenient alternative. Anonymous sign-in allows guest users to play without registration, which could increase initial engagement."
+    }
+  },
+  "firestore": {
+    "structure": [
+      {
+        "definition": {
+          "description": "Collection containing user profile documents.",
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "params": [
+            {
+              "description": "The unique ID of the user.",
+              "name": "userId"
+            }
+          ]
+        },
+        "path": "/users/{userId}"
+      },
+      {
+        "definition": {
+          "description": "Collection containing game data for each Minesweeper game.",
+          "entityName": "Game",
+          "schema": {
+            "$ref": "#/backend/entities/Game"
+          },
+          "params": [
+            {
+              "description": "The unique ID of the game.",
+              "name": "gameId"
+            }
+          ]
+        },
+        "path": "/games/{gameId}"
+      },
+      {
+        "definition": {
+          "description": "Collection containing friend request documents.",
+          "entityName": "FriendRequest",
+          "schema": {
+            "$ref": "#/backend/entities/FriendRequest"
+          },
+          "params": [
+            {
+              "description": "The unique ID of the friend request.",
+              "name": "friendRequestId"
+            }
+          ]
+        },
+        "path": "/friendRequests/{friendRequestId}"
+      }
+    ],
+    "reasoning": "Based on the application proposal and data entities, I recommend the following Firestore structure:\n\n*   **users Collection:** Stores user profile information. Documents are identified by the user's unique ID (`userId`). Key fields include `username`, `password`, `profilePreferences`, `friendCodes`, and `friendIds`.\n*   **games Collection:** Stores Minesweeper game data. Documents are identified by a unique game ID (`gameId`). Key fields include `userId` (linking to the user who played the game), `startTime`, `endTime`, `gameState`, `difficulty`, `moves`, and `result`.\n*   **friendRequests Collection:** Stores friend request data. Documents are identified by a unique friend request ID (`friendRequestId`). Key fields include `requesterId`, `recipientId`, and `status`.\n\nThis structure allows efficient querying of user data, game history, and friend relationships. Subcollections are not used to avoid excessive nesting, as the number of games per user is not expected to be extremely large."
+  }
+}
