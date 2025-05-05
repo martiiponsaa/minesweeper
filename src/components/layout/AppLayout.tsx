@@ -17,7 +17,7 @@ import {
   SidebarGroupLabel,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Home, History, Users, Settings, LogOut, HelpCircle, BarChart3 } from 'lucide-react';
+import { Home, History, Users, Settings, LogOut, HelpCircle, BarChart3, LogIn } from 'lucide-react'; // Added LogIn
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
@@ -125,12 +125,21 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                  </Link>
                </SidebarMenuButton>
              </SidebarMenuItem>
-             <SidebarMenuItem>
-               <SidebarMenuButton onClick={handleSignOut} tooltip="Logout">
-                 <LogOut />
-                 <span>Logout</span>
-               </SidebarMenuButton>
-             </SidebarMenuItem>
+             {user ? ( // Show Logout only if user is logged in
+               <SidebarMenuItem>
+                 <SidebarMenuButton onClick={handleSignOut} tooltip="Logout">
+                   <LogOut />
+                   <span>Logout</span>
+                 </SidebarMenuButton>
+               </SidebarMenuItem>
+             ) : ( // Show Login if user is not logged in
+               <SidebarMenuItem>
+                 <SidebarMenuButton onClick={() => router.push('/login')} tooltip="Login">
+                   <LogIn />
+                   <span>Login</span>
+                 </SidebarMenuButton>
+               </SidebarMenuItem>
+             )}
            </SidebarMenu>
          </SidebarFooter>
       </Sidebar>
@@ -142,41 +151,47 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
              {/* Mobile Sidebar Trigger */}
              <SidebarTrigger className="sm:hidden"/>
 
-             {/* User Menu */}
+             {/* User Menu or Login Button */}
              <div className="ml-auto flex items-center gap-4">
-                 {/* Add other header items like notifications here if needed */}
-                 <DropdownMenu>
-                     <DropdownMenuTrigger asChild>
-                         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                             <Avatar className="h-8 w-8">
-                                 <AvatarImage src={user?.photoURL || undefined} alt={user?.displayName || user?.email || 'User'} data-ai-hint="profile picture"/>
-                                 <AvatarFallback>{getInitials()}</AvatarFallback>
-                             </Avatar>
-                         </Button>
-                     </DropdownMenuTrigger>
-                     <DropdownMenuContent className="w-56" align="end" forceMount>
-                         <DropdownMenuLabel className="font-normal">
-                             <div className="flex flex-col space-y-1">
-                                 <p className="text-sm font-medium leading-none">
-                                     {user?.displayName || 'User'}
-                                 </p>
-                                 <p className="text-xs leading-none text-muted-foreground">
-                                     {user?.email || 'Guest'}
-                                 </p>
-                             </div>
-                         </DropdownMenuLabel>
-                         <DropdownMenuSeparator />
-                         <DropdownMenuItem onClick={() => router.push('/profile')}>
-                             <Settings className="mr-2 h-4 w-4" />
-                             <span>Settings</span>
-                         </DropdownMenuItem>
-                         <DropdownMenuSeparator />
-                         <DropdownMenuItem onClick={handleSignOut}>
-                             <LogOut className="mr-2 h-4 w-4" />
-                             <span>Log out</span>
-                         </DropdownMenuItem>
-                     </DropdownMenuContent>
-                 </DropdownMenu>
+                 {user ? ( // If user is logged in, show dropdown
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                                <Avatar className="h-8 w-8">
+                                    <AvatarImage src={user.photoURL || undefined} alt={user.displayName || user.email || 'User'} data-ai-hint="profile picture"/>
+                                    <AvatarFallback>{getInitials()}</AvatarFallback>
+                                </Avatar>
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="w-56" align="end" forceMount>
+                            <DropdownMenuLabel className="font-normal">
+                                <div className="flex flex-col space-y-1">
+                                    <p className="text-sm font-medium leading-none">
+                                        {user.displayName || 'User'}
+                                    </p>
+                                    <p className="text-xs leading-none text-muted-foreground">
+                                        {user.email || 'Guest'}
+                                    </p>
+                                </div>
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => router.push('/profile')}>
+                                <Settings className="mr-2 h-4 w-4" />
+                                <span>Settings</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={handleSignOut}>
+                                <LogOut className="mr-2 h-4 w-4" />
+                                <span>Log out</span>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                 ) : ( // If user is not logged in, show Login button
+                   <Button variant="outline" onClick={() => router.push('/login')}>
+                     <LogIn className="mr-2 h-4 w-4" />
+                     Login
+                   </Button>
+                 )}
              </div>
          </header>
         {children}

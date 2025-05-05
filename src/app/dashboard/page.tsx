@@ -5,42 +5,41 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+// import { Skeleton } from '@/components/ui/skeleton'; // Skeleton no longer needed for auth loading
 
 export default function DashboardPage() {
-  const { user, signOut, loading } = useAuth(); // Keep loading state
+  const { user, signOut } = useAuth(); // Remove loading state if not used elsewhere
   const router = useRouter();
 
-  // Show skeleton while loading user data
-  if (loading) {
-      return (
-         <AppLayout>
-           <div className="container mx-auto p-4 md:p-8 space-y-8">
-              <div className="flex justify-between items-center">
-                <Skeleton className="h-10 w-1/3" />
-                <Skeleton className="h-10 w-24" />
-              </div>
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-               <Skeleton className="h-40 rounded-lg" />
-               <Skeleton className="h-40 rounded-lg" />
-               <Skeleton className="h-40 rounded-lg" />
-                <Skeleton className="h-40 rounded-lg md:col-span-2 lg:col-span-1" />
-                <Skeleton className="h-40 rounded-lg md:col-span-2" />
-              </div>
-           </div>
-         </AppLayout>
-       );
-  }
+  // // Show skeleton while loading user data - Removed as per request
+  // if (loading) {
+  //     return (
+  //        <AppLayout>
+  //          <div className="container mx-auto p-4 md:p-8 space-y-8">
+  //             <div className="flex justify-between items-center">
+  //               <Skeleton className="h-10 w-1/3" />
+  //               <Skeleton className="h-10 w-24" />
+  //             </div>
+  //            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+  //              <Skeleton className="h-40 rounded-lg" />
+  //              <Skeleton className="h-40 rounded-lg" />
+  //              <Skeleton className="h-40 rounded-lg" />
+  //               <Skeleton className="h-40 rounded-lg md:col-span-2 lg:col-span-1" />
+  //               <Skeleton className="h-40 rounded-lg md:col-span-2" />
+  //             </div>
+  //          </div>
+  //        </AppLayout>
+  //      );
+  // }
 
 
   return (
-    // Removed AuthCheck wrapper
     <AppLayout>
       <div className="container mx-auto p-4 md:p-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-foreground">
-            {/* Use optional chaining as user might be null now */}
-            Welcome, {user?.displayName || user?.email || 'User'}!
+            {/* Handle null user case */}
+            Welcome, {user?.displayName || user?.email || 'Guest'}!
           </h1>
           {/* Show login button if no user, logout if user exists */}
            {user ? (

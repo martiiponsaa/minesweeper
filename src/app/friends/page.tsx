@@ -19,7 +19,6 @@
     };
 
    return (
-     // Removed AuthCheck wrapper
      <AppLayout>
        <div className="container mx-auto p-4 md:p-8">
          <h1 className="text-3xl font-bold text-foreground mb-8">Friends</h1>

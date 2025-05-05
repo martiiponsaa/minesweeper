@@ -209,27 +209,26 @@
       return '?';
     };
 
-    // Handle case where user is not logged in
-    if (!authLoading && !user) {
-      return (
-         <AppLayout>
-             <div className="container mx-auto p-4 md:p-8">
-               <h1 className="text-3xl font-bold text-foreground mb-8">Profile & Settings</h1>
-                <Alert variant="default" className="bg-card">
-                   <AlertCircle className="h-4 w-4" />
-                   <AlertTitle>Not Logged In</AlertTitle>
-                   <AlertDescription>
-                     Please <Button variant="link" className="p-0 h-auto" onClick={() => router.push('/login')}>login</Button> to view and edit your profile.
-                   </AlertDescription>
-                 </Alert>
-             </div>
-          </AppLayout>
-       )
-     }
+    // // Handle case where user is not logged in - Removed as AppLayout handles this
+    // if (!authLoading && !user) {
+    //   return (
+    //      <AppLayout>
+    //          <div className="container mx-auto p-4 md:p-8">
+    //            <h1 className="text-3xl font-bold text-foreground mb-8">Profile & Settings</h1>
+    //             <Alert variant="default" className="bg-card">
+    //                <AlertCircle className="h-4 w-4" />
+    //                <AlertTitle>Not Logged In</AlertTitle>
+    //                <AlertDescription>
+    //                  Please <Button variant="link" className="p-0 h-auto" onClick={() => router.push('/login')}>login</Button> to view and edit your profile.
+    //                </AlertDescription>
+    //              </Alert>
+    //          </div>
+    //       </AppLayout>
+    //    )
+    //  }
 
 
    return (
-     // Removed AuthCheck wrapper
      <AppLayout>
        <div className="container mx-auto p-4 md:p-8">
          <h1 className="text-3xl font-bold text-foreground mb-8">Profile & Settings</h1>
@@ -286,12 +285,11 @@
                                    {...field}
                                    disabled={isLoading}
                                  />
-                                {(field.value || user?.photoURL) && ( // Show preview from field or auth
+                                {/* Show preview from field or user auth data */}
                                   <Avatar className="h-10 w-10">
-                                    <AvatarImage src={field.value || user?.photoURL || undefined} alt="Avatar Preview" data-ai-hint="profile picture"/>
+                                     <AvatarImage src={field.value || user?.photoURL || undefined} alt="Avatar Preview" data-ai-hint="profile picture"/>
                                      <AvatarFallback>{getInitials()}</AvatarFallback>
                                   </Avatar>
-                                 )}
                               </div>
                             </FormControl>
                              <FormDescription>Enter the URL of your desired avatar image.</FormDescription>

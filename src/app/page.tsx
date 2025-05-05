@@ -6,19 +6,15 @@ import { useAuth } from '@/hooks/useAuth'; // Import useAuth hook
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, loading } = useAuth(); // Use the auth hook
+  // const { user, loading } = useAuth(); // No longer need user/loading for initial redirect
 
   useEffect(() => {
-    if (!loading) { // Only redirect once loading is complete
-      if (user) {
-        router.replace('/dashboard'); // If user is logged in, redirect to dashboard
-      } else {
-        router.replace('/login'); // If user is not logged in, redirect to login
-      }
-    }
-  }, [user, loading, router]);
+    // Redirect immediately to the dashboard regardless of auth state
+    router.replace('/dashboard');
+    // }, [user, loading, router]); // Original dependencies
+  }, [router]); // Only depend on router
 
-  // Render a loading indicator or null while checking auth state and redirecting
+  // Render a simple loading indicator while redirecting
   return (
      <div className="flex items-center justify-center min-h-screen">
        Loading...
