@@ -3,28 +3,195 @@
  import { useAuth } from '@/hooks/useAuth';
  import { Button } from '@/components/ui/button';
  import { Input } from '@/components/ui/input';
- import { Label } from '@/components/ui/label'; // Import Label
+ import { Label } from '@/components/ui/label'; 
  import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
  import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
  import { Separator } from '@/components/ui/separator';
- import { UserPlus, Check, X, Users } from 'lucide-react'; // Added Users icon
- import { useState } from 'react';
- import { useRouter } from 'next/navigation'; // Import useRouter
+ import { UserPlus, Check, X, Users, Eye } from 'lucide-react'; 
+ import { useState, useEffect } from 'react';
+ import { useRouter } from 'next/navigation'; 
+ import { useFirestoreDocument } from '@/hooks/useFirestoreDocument';
+ import { UserSchema, type User as UserType } from '@/lib/firebaseTypes';
+ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
+ import { getFirebase } from '@/firebase';
+ import { doc, updateDoc, arrayUnion, query, where, getDocs, collection, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore';
+ import { useToast } from '@/hooks/use-toast';
+ import { FriendRequestSchema, type FriendRequest } from '@/lib/firebaseTypes';
+ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
  export default function FriendsPage() {
     const { user } = useAuth();
-    const [friendCode, setFriendCode] = useState('');
-    const router = useRouter(); // Initialize useRouter
+    const { firestore } = getFirebase();
+    const { toast } = useToast();
+    const router = useRouter(); 
 
-    const handleAddFriend = () => {
-        console.log("Adding friend with code:", friendCode);
-        // TODO: Implement logic to send friend request using the friendCode
-        setFriendCode(''); // Clear input after attempting to add
+    const [friendCodeToAdd, setFriendCodeToAdd] = useState('');
+    
+    // Fetch current user's data to get their actual friend code and friends list
+    const { data: currentUserData, loading: currentUserLoading } = useFirestoreDocument<UserType>(
+      'users',
+      user?.uid,
+      UserSchema
+    );
+
+    // Fetch profiles of users whose UIDs are in the current user's friendIds list
+    const { data: friendsProfiles, loading: friendsProfilesLoading } = useFirestoreCollection<UserType>(
+        'users',
+        UserSchema,
+        currentUserData?.friendIds && currentUserData.friendIds.length > 0 
+            ? [where('id', 'in', currentUserData.friendIds)] 
+            : [], // Empty constraints if no friendIds or they are not loaded yet
+        !currentUserData?.friendIds || currentUserData.friendIds.length === 0 // Disable if no friend IDs
+    );
+    
+    // Fetch pending friend requests where the current user is the recipient
+    const { data: incomingRequests, loading: incomingRequestsLoading, refetch: refetchIncomingRequests } = useFirestoreCollection<FriendRequest>(
+        'friendRequests',
+        FriendRequestSchema,
+        user ? [where('recipientId', '==', user.uid), where('status', '==', 'pending')] : [],
+        !user
+    );
+
+    // Fetch pending friend requests sent by the current user
+     const { data: outgoingRequests, loading: outgoingRequestsLoading, refetch: refetchOutgoingRequests } = useFirestoreCollection<FriendRequest>(
+        'friendRequests',
+        FriendRequestSchema,
+        user ? [where('requesterId', '==', user.uid), where('status', '==', 'pending')] : [],
+        !user
+    );
+
+
+    const handleAddFriend = async () => {
+        if (!user || !firestore || !currentUserData?.userFriendCode) {
+            toast({ title: "Error", description: "Cannot add friend. Ensure you are logged in.", variant: "destructive" });
+            return;
+        }
+        if (friendCodeToAdd === currentUserData.userFriendCode) {
+            toast({ title: "Cannot Add Self", description: "You cannot add yourself as a friend.", variant: "destructive" });
+            setFriendCodeToAdd('');
+            return;
+        }
+        if (currentUserData.friendIds?.some(friendId => {
+            // This check is a bit complex as friendCodeToAdd is not a UID directly.
+            // We'd need to query users collection to see if friendCodeToAdd matches any existing friend's userFriendCode.
+            // For simplicity, this direct check is an approximation. A more robust check happens server-side or before sending.
+            // Or, if friendCodes store the actual UIDs, then this check is more direct.
+            // Assuming friendCodeToAdd is the *friend's* code, we need to find that friend.
+            return false; // Placeholder: more robust check needed
+        })) {
+            toast({ title: "Already Friends", description: "You are already friends with this user.", variant: "info" });
+            setFriendCodeToAdd('');
+            return;
+        }
+
+        try {
+            // Check if a request already exists (either way)
+            const existingRequestQuery1 = query(collection(firestore, 'friendRequests'), 
+                where('requesterId', '==', user.uid), 
+                where('recipientFriendCode', '==', friendCodeToAdd),
+                where('status', '==', 'pending')
+            );
+            const existingRequestQuery2 = query(collection(firestore, 'friendRequests'), 
+                where('recipientId', '==', user.uid), 
+                where('requesterFriendCode', '==', friendCodeToAdd),
+                where('status', '==', 'pending')
+            );
+            
+            const [snapshot1, snapshot2] = await Promise.all([getDocs(existingRequestQuery1), getDocs(existingRequestQuery2)]);
+
+            if (!snapshot1.empty || !snapshot2.empty) {
+                toast({ title: "Request Pending", description: "A friend request already exists with this user.", variant: "info" });
+                setFriendCodeToAdd('');
+                return;
+            }
+
+            // Find the recipient user by their friend code
+            const usersRef = collection(firestore, 'users');
+            const q = query(usersRef, where('userFriendCode', '==', friendCodeToAdd), limit(1));
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                toast({ title: "User Not Found", description: "No user found with this friend code.", variant: "destructive" });
+                setFriendCodeToAdd('');
+                return;
+            }
+            const recipientUserDoc = querySnapshot.docs[0];
+            const recipientUserData = recipientUserDoc.data() as UserType;
+
+            if (recipientUserData.id === user.uid) {
+                 toast({ title: "Cannot Add Self", description: "You cannot add yourself as a friend.", variant: "destructive" });
+                 setFriendCodeToAdd('');
+                 return;
+            }
+             // Check if already friends
+            if (currentUserData.friendIds?.includes(recipientUserData.id)) {
+                toast({ title: "Already Friends", description: "You are already friends with this user.", variant: "info" });
+                setFriendCodeToAdd('');
+                return;
+            }
+
+
+            // Create new friend request
+            const newRequestRef = doc(collection(firestore, 'friendRequests'));
+            const newRequest: Omit<FriendRequest, 'id'> = {
+                requesterId: user.uid,
+                recipientId: recipientUserData.id,
+                status: 'pending',
+                requesterFriendCode: currentUserData.userFriendCode,
+                recipientFriendCode: recipientUserData.userFriendCode,
+            };
+            await setDoc(newRequestRef, newRequest);
+
+            toast({ title: "Friend Request Sent", description: `Request sent to user with code ${friendCodeToAdd}.` });
+            setFriendCodeToAdd('');
+            refetchOutgoingRequests(); // Refresh outgoing requests list
+        } catch (error) {
+            console.error("Error sending friend request:", error);
+            toast({ title: "Error", description: "Could not send friend request.", variant: "destructive" });
+        }
     };
+    
+    const handleFriendRequest = async (request: FriendRequest, action: 'accept' | 'reject') => {
+        if (!user || !firestore) return;
+        
+        const requestDocRef = doc(firestore, 'friendRequests', request.id);
+        
+        try {
+            if (action === 'accept') {
+                const batch = writeBatch(firestore);
+                // Update request status
+                batch.update(requestDocRef, { status: 'accepted' });
+
+                // Add to both users' friend lists
+                const currentUserDocRef = doc(firestore, 'users', user.uid);
+                const requesterUserDocRef = doc(firestore, 'users', request.requesterId);
+                
+                batch.update(currentUserDocRef, { friendIds: arrayUnion(request.requesterId) });
+                batch.update(requesterUserDocRef, { friendIds: arrayUnion(user.uid) });
+                
+                await batch.commit();
+                toast({ title: "Friend Added", description: "You are now friends!" });
+            } else { // reject
+                await updateDoc(requestDocRef, { status: 'rejected' });
+                toast({ title: "Request Rejected", description: "Friend request has been rejected." });
+            }
+            refetchIncomingRequests(); // Refresh the list of incoming requests
+        } catch (error) {
+            console.error(`Error ${action}ing friend request:`, error);
+            toast({ title: "Error", description: `Could not ${action} friend request.`, variant: "destructive" });
+        }
+    };
+
+    const getInitials = (name?: string, email?: string) => {
+      if (name) return name.charAt(0).toUpperCase();
+      if (email) return email.charAt(0).toUpperCase();
+      return '?';
+    };
+
 
    return (
      <AppLayout>
-       {!user ? ( // Check if user is a guest (null)
+       {!user ? ( 
          <div className="container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
            <Users className="h-16 w-16 text-muted-foreground mb-4" />
            <h1 className="text-2xl font-bold text-foreground mb-3">Manage Your Friends</h1>
@@ -36,36 +203,55 @@
            </Button>
          </div>
        ) : (
-         // Original content for logged-in users
          <div className="container mx-auto p-4 md:p-8">
            <h1 className="text-3xl font-bold text-foreground mb-8">Friends</h1>
 
            <Tabs defaultValue="my-friends" className="w-full">
               <TabsList className="grid w-full grid-cols-3 mb-6">
-                  <TabsTrigger value="my-friends">My Friends</TabsTrigger>
+                  <TabsTrigger value="my-friends">My Friends ({friendsProfiles.length})</TabsTrigger>
                   <TabsTrigger value="add-friend">Add Friend</TabsTrigger>
-                  <TabsTrigger value="requests">Requests</TabsTrigger>
+                  <TabsTrigger value="requests">Requests ({incomingRequests.filter(req => req.status === 'pending').length})</TabsTrigger>
               </TabsList>
 
-               {/* My Friends Tab */}
                <TabsContent value="my-friends">
                   <Card>
                       <CardHeader>
                           <CardTitle>Your Friends</CardTitle>
-                          <CardDescription>View your friends list and compare stats.</CardDescription>
+                          <CardDescription>View your friends list and their profiles.</CardDescription>
                       </CardHeader>
                       <CardContent>
-                           {/* Placeholder */}
+                           {currentUserLoading || friendsProfilesLoading ? (
+                             <p>Loading friends...</p>
+                           ) : friendsProfiles.length === 0 ? (
                             <div className="text-center text-muted-foreground py-10">
                               <p>Your friends list is empty.</p>
-                              <p className="mt-2">Add friends using their friend code!</p>
+                              <p className="mt-2">Add friends using their friend code in the "Add Friend" tab!</p>
                             </div>
-                            {/* TODO: Implement displaying friends list */}
+                           ) : (
+                             <ul className="space-y-3">
+                                {friendsProfiles.map(friend => (
+                                  <li key={friend.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+                                    <div className="flex items-center gap-3">
+                                       <Avatar>
+                                         <AvatarImage src={friend.profilePreferences?.avatar || undefined} alt={friend.profilePreferences?.displayName || friend.username || 'Friend'} data-ai-hint="profile picture"/>
+                                         <AvatarFallback>{getInitials(friend.profilePreferences?.displayName || friend.username, friend.email)}</AvatarFallback>
+                                       </Avatar>
+                                       <div>
+                                         <p className="font-semibold text-foreground">{friend.profilePreferences?.displayName || friend.username || 'Unnamed Friend'}</p>
+                                         <p className="text-xs text-muted-foreground">@{friend.username || friend.userFriendCode}</p>
+                                       </div>
+                                    </div>
+                                    <Button variant="outline" size="sm" onClick={() => router.push(`/profile/${friend.id}`)} title="View Friend's Profile">
+                                        <Eye className="mr-1 h-4 w-4" /> Profile
+                                    </Button>
+                                  </li>
+                                ))}
+                             </ul>
+                           )}
                        </CardContent>
                   </Card>
                </TabsContent>
 
-                {/* Add Friend Tab */}
                 <TabsContent value="add-friend">
                    <Card>
                        <CardHeader>
@@ -74,9 +260,21 @@
                        </CardHeader>
                        <CardContent className="space-y-4">
                           <div>
-                              <Label htmlFor="friendCode" className="mb-2 block">Your Friend Code:</Label>
-                               {/* TODO: Display user's actual friend code */}
-                               <Input type="text" value="YOUR-CODE-XYZ" readOnly className="bg-muted cursor-not-allowed" />
+                              <Label htmlFor="myFriendCode" className="mb-2 block">Your Friend Code:</Label>
+                               <Input 
+                                  id="myFriendCode"
+                                  type="text" 
+                                  value={currentUserLoading ? "Loading..." : (currentUserData?.userFriendCode || "N/A - Please re-login if this persists")} 
+                                  readOnly 
+                                  className="bg-muted cursor-pointer" 
+                                  onClick={() => {
+                                    if (currentUserData?.userFriendCode) {
+                                        navigator.clipboard.writeText(currentUserData.userFriendCode);
+                                        toast({title: "Copied!", description: "Your friend code has been copied to the clipboard."});
+                                    }
+                                  }}
+                                  title="Click to copy your friend code"
+                                />
                                 <p className="text-xs text-muted-foreground mt-1">Share this code with others so they can add you.</p>
                           </div>
                            <Separator />
@@ -85,20 +283,34 @@
                               <div className="flex gap-2">
                                   <Input
                                       id="addFriendCode"
-                                      placeholder="Enter friend code"
-                                      value={friendCode}
-                                       onChange={(e) => setFriendCode(e.target.value)}
+                                      placeholder="Enter 10-digit friend code"
+                                      value={friendCodeToAdd}
+                                       onChange={(e) => setFriendCodeToAdd(e.target.value.trim())}
+                                       maxLength={10}
                                    />
-                                  <Button onClick={handleAddFriend} disabled={!friendCode}>
+                                  <Button onClick={handleAddFriend} disabled={!friendCodeToAdd || friendCodeToAdd.length !== 10}>
                                        <UserPlus className="mr-2 h-4 w-4" /> Add Friend
                                    </Button>
                               </div>
                            </div>
+                            <Separator />
+                            <div>
+                                <h3 className="text-md font-semibold mb-2">Sent Requests</h3>
+                                {outgoingRequestsLoading ? <p>Loading sent requests...</p> :
+                                 outgoingRequests.filter(req => req.status === 'pending').length === 0 ? <p className="text-sm text-muted-foreground">No pending sent requests.</p> :
+                                 <ul className="space-y-2">
+                                     {outgoingRequests.filter(req => req.status === 'pending').map(req => (
+                                         <li key={req.id} className="text-sm text-muted-foreground">
+                                             Request sent to code: {req.recipientFriendCode}
+                                         </li>
+                                     ))}
+                                 </ul>
+                                }
+                            </div>
                        </CardContent>
                    </Card>
                 </TabsContent>
 
-                {/* Requests Tab */}
                 <TabsContent value="requests">
                    <Card>
                        <CardHeader>
@@ -106,11 +318,29 @@
                            <CardDescription>Manage incoming friend requests.</CardDescription>
                        </CardHeader>
                        <CardContent>
-                            {/* Placeholder */}
-                            <div className="text-center text-muted-foreground py-10">
-                              <p>No pending friend requests.</p>
-                            </div>
-                            {/* TODO: Implement displaying and handling friend requests */}
+                            {incomingRequestsLoading ? (
+                                <p>Loading requests...</p>
+                            ) : incomingRequests.filter(req => req.status === 'pending').length === 0 ? (
+                                <div className="text-center text-muted-foreground py-10">
+                                    <p>No pending friend requests.</p>
+                                </div>
+                            ) : (
+                                <ul className="space-y-3">
+                                    {incomingRequests.filter(req => req.status === 'pending').map(request => (
+                                        <li key={request.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
+                                           <p className="font-medium">Request from: {request.requesterFriendCode || "Unknown User"}</p>
+                                           <div className="flex gap-2">
+                                               <Button size="sm" variant="outline" onClick={() => handleFriendRequest(request, 'accept')}>
+                                                   <Check className="mr-1 h-4 w-4 text-green-500" /> Accept
+                                               </Button>
+                                               <Button size="sm" variant="outline" onClick={() => handleFriendRequest(request, 'reject')}>
+                                                   <X className="mr-1 h-4 w-4 text-red-500" /> Reject
+                                               </Button>
+                                           </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
                        </CardContent>
                    </Card>
                 </TabsContent>

@@ -133,7 +133,8 @@ export default function AuthForm() {
      setIsLoading(true);
      try {
        const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-       
+       const userFriendCode = userCredential.user.uid.substring(0, 10);
+
        // Update Firebase Auth profile
        await updateProfile(userCredential.user, { displayName: values.username });
 
@@ -141,15 +142,16 @@ export default function AuthForm() {
        const userDocRef = doc(firestore, 'users', userCredential.user.uid);
        await setDoc(userDocRef, {
          id: userCredential.user.uid,
-         username: values.username, // Store the chosen username
-         email: userCredential.user.email, // Store email for reference
+         username: values.username, 
+         email: userCredential.user.email, 
+         userFriendCode: userFriendCode,
          profilePreferences: {
-           displayName: values.username, // Set initial display name
-           avatar: '', // Default avatar or leave empty
+           displayName: values.username, 
+           avatar: '', 
          },
-         friendCodes: [], // Initialize empty array
-         friendIds: [],   // Initialize empty array
-       }, { merge: true }); // Merge to avoid overwriting if doc somehow exists
+         friendCodes: [], 
+         friendIds: [],   
+       }, { merge: true }); 
 
        handleAuthSuccess('Registration Successful');
      } catch (error) {
@@ -159,32 +161,28 @@ export default function AuthForm() {
      }
    };
 
-  // If you're getting an 'auth/unauthorized-domain' error:
-  // 1. Go to your Firebase project in the Firebase Console.
-  // 2. Navigate to Authentication -> Sign-in method.
-  // 3. Under "Authorized domains", click "Add domain".
-  // 4. Add your current domain (e.g., 'localhost' if you are testing locally, or your deployed domain).
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
+      const userFriendCode = user.uid.substring(0, 10);
 
       // Save/update user data to Firestore on Google sign-in
       const userDocRef = doc(firestore, 'users', user.uid);
       await setDoc(userDocRef, {
         id: user.uid,
-        username: user.displayName || user.email?.split('@')[0] || `user_${user.uid.substring(0,5)}`, // Use display name, or part of email, or a default
+        username: user.displayName || user.email?.split('@')[0] || `user_${user.uid.substring(0,5)}`, 
         email: user.email,
+        userFriendCode: userFriendCode,
         profilePreferences: {
           displayName: user.displayName || user.email?.split('@')[0] || `User ${user.uid.substring(0,5)}`,
           avatar: user.photoURL || '',
         },
-        // Ensure these fields exist, even if empty, to match UserSchema
         friendCodes: [], 
         friendIds: [],
-      }, { merge: true }); // Use merge to create or update user data
+      }, { merge: true }); 
 
       handleAuthSuccess('Signed in with Google');
     } catch (error) {
@@ -196,10 +194,7 @@ export default function AuthForm() {
 
    const handleAnonymousSignIn = async () => {
       setIsLoading(true);
-      // No Firebase sign-in for guest mode, directly navigate
-      // No Firestore data creation for guest
-      router.push('/dashboard'); 
-      // We don't call handleAuthSuccess as there's no actual "auth" event
+      router.push('/dashboard');
       toast({ title: "Entering as Guest", description: "Your progress will not be saved." });
       setIsLoading(false);
     };
@@ -313,7 +308,7 @@ export default function AuthForm() {
                <span className="w-full border-t" />
              </div>
              <div className="relative flex justify-center text-xs uppercase">
-               <span className="bg-card px-2 text-muted-foreground"> {/* Changed from bg-background */}
+               <span className="bg-card px-2 text-muted-foreground"> 
                  Or continue with
                </span>
              </div>

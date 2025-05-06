@@ -9,14 +9,15 @@ const timestampSchema = z.custom<Timestamp>((data) => data instanceof Object && 
 // User Entity
 export const UserSchema = z.object({
   id: z.string(),
-  username: z.string().optional(), 
-  email: z.string().email().nullable().optional(), 
+  username: z.string().optional(),
+  email: z.string().email().nullable().optional(),
   profilePreferences: z.object({
     displayName: z.string().optional(),
-    avatar: z.string().optional(), 
+    avatar: z.string().optional(),
   }).optional(),
-  friendCodes: z.array(z.string()).optional(),
-  friendIds: z.array(z.string()).optional(), 
+  userFriendCode: z.string().length(10, "Friend code must be 10 characters").optional(), // User's own friend code
+  friendCodes: z.array(z.string()).optional(), // Potentially for codes they've entered, or can be deprecated
+  friendIds: z.array(z.string()).optional(), // Array of UIDs of their friends
 });
 
 export type User = z.infer<typeof UserSchema>;
@@ -25,7 +26,7 @@ export type User = z.infer<typeof UserSchema>;
 // Game Move Entity (Sub-object within Game)
 export const MoveSchema = z.object({
   timestamp: timestampSchema,
-  action: z.string(), 
+  action: z.string(),
   x: z.number().int(),
   y: z.number().int(),
 });
@@ -42,10 +43,10 @@ export const GameSchema = z.object({
   userId: z.string(),
   startTime: timestampSchema,
   endTime: timestampSchema.nullable(),
-  gameState: z.string(), 
-  difficulty: z.string(), 
+  gameState: z.string(),
+  difficulty: z.string(),
   moves: z.array(MoveSchema).optional(),
-  result: GameResultSchema.nullable(), 
+  result: GameResultSchema.nullable(),
   lastSavedTime: timestampSchema.optional().nullable(), // Added for tracking last save
 });
 
@@ -61,6 +62,8 @@ export const FriendRequestSchema = z.object({
   requesterId: z.string(),
   recipientId: z.string(),
   status: FriendRequestStatusSchema,
+  requesterFriendCode: z.string().optional(), // Store requester's friend code for recipient UI
+  recipientFriendCode: z.string().optional(), // Store recipient's friend code for requester UI
 });
 
 export type FriendRequest = z.infer<typeof FriendRequestSchema>;
@@ -68,6 +71,6 @@ export type FriendRequest = z.infer<typeof FriendRequestSchema>;
 // Zod schema for updating user profile preferences
 export const ProfilePreferencesSchema = z.object({
   displayName: z.string().min(1, "Display name cannot be empty").optional(),
-  avatar: z.string().url("Invalid avatar URL").optional().or(z.literal("")), 
+  avatar: z.string().url("Invalid avatar URL").optional().or(z.literal("")),
 });
 export type ProfilePreferences = z.infer<typeof ProfilePreferencesSchema>;

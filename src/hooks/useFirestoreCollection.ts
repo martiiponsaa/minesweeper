@@ -11,6 +11,9 @@ import {
   FirestoreError,
   DocumentData,
   Unsubscribe,
+  limit, // Added limit
+  orderBy, // Added orderBy
+  where, // Added where
 } from 'firebase/firestore';
 import { z, ZodError } from 'zod';
 import { getFirebase } from '@/firebase';
