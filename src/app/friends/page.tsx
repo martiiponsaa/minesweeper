@@ -19,6 +19,7 @@
  import { useToast } from '@/hooks/use-toast';
  import { FriendRequestSchema, type FriendRequest } from '@/lib/firebaseTypes';
  import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+ import { generateRandomFriendCode } from '@/lib/utils';
 
  export default function FriendsPage() {
     const { user } = useAuth();
@@ -29,7 +30,7 @@
     const [friendCodeToAdd, setFriendCodeToAdd] = useState('');
 
     // Fetch current user's data to get their actual friend code and friends list
-    const { data: currentUserData, loading: currentUserLoading } = useFirestoreDocument<UserType>(
+    const { data: currentUserData, loading: currentUserLoading, error: currentUserError } = useFirestoreDocument<UserType>(
       'users',
       user?.uid,
       UserSchema
@@ -37,10 +38,10 @@
 
     // Effect to generate and save userFriendCode if it's missing
     useEffect(() => {
-        if (user && firestore && currentUserData && !currentUserLoading && !currentUserData.userFriendCode) {
+        if (user && firestore && currentUserData && !currentUserLoading && !currentUserData.userFriendCode && !currentUserError) {
             console.log("Attempting to generate and save missing userFriendCode for user:", user.uid);
             const userDocRef = doc(firestore, 'users', user.uid);
-            const newUserFriendCode = user.uid.substring(0, 10);
+            const newUserFriendCode = generateRandomFriendCode();
 
             updateDoc(userDocRef, { userFriendCode: newUserFriendCode })
                 .then(() => {
@@ -52,7 +53,7 @@
                     toast({ title: "Error", description: "Could not generate your friend code. Please try reloading.", variant: "destructive" });
                 });
         }
-    }, [user, firestore, currentUserData, currentUserLoading, toast]);
+    }, [user, firestore, currentUserData, currentUserLoading, currentUserError, toast]);
 
 
     // Fetch profiles of users whose UIDs are in the current user's friendIds list

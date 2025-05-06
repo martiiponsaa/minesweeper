@@ -18,6 +18,7 @@ import { useRouter } from 'next/navigation';
 import { FcGoogle } from "react-icons/fc"; // Using react-icons for Google icon
 import { User as LucideUser } from 'lucide-react'; // For anonymous icon
 import { doc, setDoc } from 'firebase/firestore';
+import { generateRandomFriendCode } from '@/lib/utils'; // Import the new function
 
 // Validation Schemas
 const LoginSchema = z.object({
@@ -133,7 +134,7 @@ export default function AuthForm() {
      setIsLoading(true);
      try {
        const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-       const userFriendCode = userCredential.user.uid.substring(0, 10);
+       const userFriendCode = generateRandomFriendCode(); // Use new random code generator
 
        // Update Firebase Auth profile
        await updateProfile(userCredential.user, { displayName: values.username });
@@ -142,16 +143,16 @@ export default function AuthForm() {
        const userDocRef = doc(firestore, 'users', userCredential.user.uid);
        await setDoc(userDocRef, {
          id: userCredential.user.uid,
-         username: values.username, 
-         email: userCredential.user.email, 
+         username: values.username,
+         email: userCredential.user.email,
          userFriendCode: userFriendCode,
          profilePreferences: {
-           displayName: values.username, 
-           avatar: '', 
+           displayName: values.username,
+           avatar: '',
          },
-         friendCodes: [], 
-         friendIds: [],   
-       }, { merge: true }); 
+         friendCodes: [],
+         friendIds: [],
+       }, { merge: true });
 
        handleAuthSuccess('Registration Successful');
      } catch (error) {
@@ -167,22 +168,22 @@ export default function AuthForm() {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      const userFriendCode = user.uid.substring(0, 10);
+      const userFriendCode = generateRandomFriendCode(); // Use new random code generator
 
       // Save/update user data to Firestore on Google sign-in
       const userDocRef = doc(firestore, 'users', user.uid);
       await setDoc(userDocRef, {
         id: user.uid,
-        username: user.displayName || user.email?.split('@')[0] || `user_${user.uid.substring(0,5)}`, 
+        username: user.displayName || user.email?.split('@')[0] || `user_${user.uid.substring(0,5)}`,
         email: user.email,
         userFriendCode: userFriendCode,
         profilePreferences: {
           displayName: user.displayName || user.email?.split('@')[0] || `User ${user.uid.substring(0,5)}`,
           avatar: user.photoURL || '',
         },
-        friendCodes: [], 
+        friendCodes: [],
         friendIds: [],
-      }, { merge: true }); 
+      }, { merge: true });
 
       handleAuthSuccess('Signed in with Google');
     } catch (error) {
@@ -308,7 +309,7 @@ export default function AuthForm() {
                <span className="w-full border-t" />
              </div>
              <div className="relative flex justify-center text-xs uppercase">
-               <span className="bg-card px-2 text-muted-foreground"> 
+               <span className="bg-card px-2 text-muted-foreground">
                  Or continue with
                </span>
              </div>
