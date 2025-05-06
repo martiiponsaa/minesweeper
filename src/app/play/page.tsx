@@ -8,43 +8,96 @@ import { Label } from "@/components/ui/label"
 import React, { useState, useEffect } from 'react';
 import GameBoard from '@/components/minesweeper/GameBoard';
 import { DIFFICULTY_LEVELS, type DifficultyKey } from '@/config/minesweeperSettings';
-import { useAuth } from '@/hooks/useAuth'; // To check if user is guest
+import { useAuth } from '@/hooks/useAuth'; 
 import { useRouter } from 'next/navigation';
 import { Save, LogOutIcon, RotateCcw } from 'lucide-react';
+import { getFirebase } from '@/firebase';
+import { doc, setDoc, Timestamp, collection } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
+import type { Game } from '@/lib/firebaseTypes'; // Game type for Firestore
+import { GameSchema } from '@/lib/firebaseTypes'; // Zod schema for validation if needed (optional here for direct set)
 
 
 export default function PlayPage() {
   const [selectedDifficultyKey, setSelectedDifficultyKey] = useState<DifficultyKey>('medium');
-  const [gameKey, setGameKey] = useState<number>(0); // Used to force re-render of GameBoard
+  const [gameKey, setGameKey] = useState<number>(0); 
   const [showBoard, setShowBoard] = useState<boolean>(false);
   const { user } = useAuth();
   const router = useRouter();
+  const { firestore } = getFirebase();
+  const { toast } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleStartGame = () => {
     setShowBoard(true);
-    setGameKey(prevKey => prevKey + 1); // Increment key to remount GameBoard
+    setGameKey(prevKey => prevKey + 1); 
   };
 
   const handleRestartGame = () => {
     if (showBoard) {
-      setGameKey(prevKey => prevKey + 1); // Re-initialize GameBoard by changing its key
+      setGameKey(prevKey => prevKey + 1); 
     }
   };
   
-  const handleSaveGame = () => {
-    // TODO: Implement save game logic (requires user to be logged in)
+  const handleSaveGame = async () => {
     if (!user) {
-      // Show toast or modal prompting to register/login
-      console.log("Guest cannot save game. Please register or login.");
-    } else {
-      console.log("Saving game for user:", user.uid);
+      toast({
+        title: "Login Required",
+        description: "You need to be logged in to save your game progress.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!firestore) {
+        toast({
+            title: "Error",
+            description: "Firestore is not available. Cannot save game.",
+            variant: "destructive",
+        });
+        return;
+    }
+
+    setIsSaving(true);
+
+    // Create a new game document ID
+    const gameDocRef = doc(collection(firestore, 'games'));
+
+    // NOTE: In a full implementation, you'd get the current board state
+    // from the GameBoard component (e.g., via a callback or shared state).
+    // For this example, we'll save the setup and a placeholder for gameState.
+    const gameData: Omit<Game, 'id'> = {
+      userId: user.uid,
+      startTime: Timestamp.now(),
+      endTime: null, // Game is in progress
+      // gameState: JSON.stringify(initialBoardState), // Placeholder - replace with actual board state
+      gameState: "PLACEHOLDER_SERIALIZED_BOARD_STATE", // Replace with actual serialized board
+      difficulty: DIFFICULTY_LEVELS[selectedDifficultyKey].name,
+      moves: [], // Initialize with empty moves, or get current moves
+      result: null, // Game is in progress
+    };
+
+    try {
+      // You could validate gameData with GameSchema.omit({ id: true }).parse(gameData) here if desired
+      await setDoc(gameDocRef, gameData);
+      toast({
+        title: "Game Saved!",
+        description: "Your game progress has been saved.",
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Error saving game:", error);
+      toast({
+        title: "Save Failed",
+        description: "Could not save your game. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleQuitGame = () => {
-    setShowBoard(false); // Hide the board, user can setup a new game
-    // Optionally, navigate away or show a confirmation
-    // router.push('/dashboard');
+    setShowBoard(false); 
   };
 
 
@@ -61,7 +114,7 @@ export default function PlayPage() {
           <CardContent className="flex flex-col sm:flex-row items-center gap-4">
             <div className="flex-1 w-full sm:w-auto">
               <Label htmlFor="difficulty-select">Difficulty</Label>
-              <Select value={selectedDifficultyKey} onValueChange={(value) => setSelectedDifficultyKey(value as DifficultyKey)}>
+              <Select value={selectedDifficultyKey} onValueChange={(value) => setSelectedDifficultyKey(value as DifficultyKey)} disabled={showBoard && gameKey > 0}>
                 <SelectTrigger id="difficulty-select" className="w-full">
                   <SelectValue placeholder="Select difficulty" />
                 </SelectTrigger>
@@ -98,11 +151,11 @@ export default function PlayPage() {
               <Button 
                 variant="secondary" 
                 onClick={handleSaveGame} 
-                disabled={!user} 
+                disabled={!user || isSaving} 
                 className="w-full sm:w-auto"
                 title={!user ? "Login to save your game" : "Save your current game"}
               >
-                <Save className="mr-2 h-4 w-4" /> Save Game
+                <Save className="mr-2 h-4 w-4" /> {isSaving ? "Saving..." : "Save Game"}
               </Button>
               <Button variant="destructive" onClick={handleQuitGame} className="w-full sm:w-auto">
                  <LogOutIcon className="mr-2 h-4 w-4" /> Quit Game
@@ -125,3 +178,4 @@ export default function PlayPage() {
     </AppLayout>
   );
 }
+
