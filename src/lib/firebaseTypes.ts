@@ -2,22 +2,21 @@ import { z } from 'zod';
 import type { Timestamp } from 'firebase/firestore';
 
 // Firestore Timestamp type for Zod
-const timestampSchema = z.custom<Timestamp>((data) => data instanceof Object && 'toDate' in data && typeof data.toDate === 'function', {
+const timestampSchema = z.custom<Timestamp>((data) =&gt; data instanceof Object &amp;&amp; 'toDate' in data &amp;&amp; typeof data.toDate === 'function', {
   message: 'Expected Firestore Timestamp',
 });
 
 // User Entity
 export const UserSchema = z.object({
   id: z.string(),
-  username: z.string().optional(), // Made optional to accommodate initial Google/Guest sign-in
-  email: z.string().email().nullable().optional(), // Added email field, can be null for anonymous
-  // password is not stored directly in Firestore, handled by Firebase Auth
+  username: z.string().optional(), 
+  email: z.string().email().nullable().optional(), 
   profilePreferences: z.object({
     displayName: z.string().optional(),
-    avatar: z.string().optional(), // URL or identifier for avatar
+    avatar: z.string().optional(), 
   }).optional(),
   friendCodes: z.array(z.string()).optional(),
-  friendIds: z.array(z.string()).optional(), // Array of user IDs
+  friendIds: z.array(z.string()).optional(), 
 });
 
 export type User = z.infer<typeof UserSchema>;
@@ -26,7 +25,7 @@ export type User = z.infer<typeof UserSchema>;
 // Game Move Entity (Sub-object within Game)
 export const MoveSchema = z.object({
   timestamp: timestampSchema,
-  action: z.string(), // e.g., 'click', 'flag'
+  action: z.string(), 
   x: z.number().int(),
   y: z.number().int(),
 });
@@ -43,10 +42,11 @@ export const GameSchema = z.object({
   userId: z.string(),
   startTime: timestampSchema,
   endTime: timestampSchema.nullable(),
-  gameState: z.string(), // Serialized game board state (JSON string or similar)
-  difficulty: z.string(), // e.g., 'easy', 'medium', 'hard'
+  gameState: z.string(), 
+  difficulty: z.string(), 
   moves: z.array(MoveSchema).optional(),
   result: GameResultSchema.nullable(), 
+  lastSavedTime: timestampSchema.optional().nullable(), // Added for tracking last save
 });
 
 export type Game = z.infer<typeof GameSchema>;
@@ -68,6 +68,6 @@ export type FriendRequest = z.infer<typeof FriendRequestSchema>;
 // Zod schema for updating user profile preferences
 export const ProfilePreferencesSchema = z.object({
   displayName: z.string().min(1, "Display name cannot be empty").optional(),
-  avatar: z.string().url("Invalid avatar URL").optional().or(z.literal("")), // Allow empty string to clear
+  avatar: z.string().url("Invalid avatar URL").optional().or(z.literal("")), 
 });
 export type ProfilePreferences = z.infer<typeof ProfilePreferencesSchema>;
