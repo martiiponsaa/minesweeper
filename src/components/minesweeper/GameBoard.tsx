@@ -184,7 +184,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ difficultyKey, onGameEnd, isGuest
             </AlertDialogTitle>
             <AlertDialogDescription>
               {dialogMessage.description}
-              {gameStatus === 'won' && <p className="mt-2">Your time: {timeElapsed} seconds.</p>}
+              {gameStatus === 'won' && <span className="block mt-2">Your time: {timeElapsed} seconds.</span>}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -199,3 +199,4 @@ const GameBoard: React.FC<GameBoardProps> = ({ difficultyKey, onGameEnd, isGuest
 };
 
 export default GameBoard;
+
