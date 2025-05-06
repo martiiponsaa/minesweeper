@@ -94,13 +94,17 @@ export default function AuthForm() {
           message = 'Too many attempts. Please try again later.';
           break;
       case 'auth/network-request-failed':
-          message = 'Network error. Please check your internet connection and try again.';
+          if (process.env.NEXT_PUBLIC_USE_EMULATORS === 'true') {
+            message = 'Network error. Ensure Firebase emulators (especially Auth on port 9099 and Firestore on port 8080) are running. Check your internet connection if not using emulators.';
+          } else {
+            message = 'Network error. Please check your internet connection and try again.';
+          }
           break;
       case 'auth/operation-not-allowed':
           message = 'This sign-in method is not enabled. Please contact support.';
           break;
       case 'auth/unauthorized-domain':
-          message = 'This domain is not authorized for OAuth operations. Please check your Firebase project settings (Authentication -> Sign-in method -> Authorized domains) and add your current domain (e.g., localhost if developing locally).';
+          message = 'This domain is not authorized for OAuth operations. Please check your Firebase project settings (Authentication -> Sign-in method -> Authorized domains) and add your current domain (e.g., localhost if developing locally). If using emulators, this might also indicate an issue with emulator configuration or accessibility.';
           break;
       default:
         // Keep the generic message for other errors
@@ -309,7 +313,7 @@ export default function AuthForm() {
                <span className="w-full border-t" />
              </div>
              <div className="relative flex justify-center text-xs uppercase">
-               <span className="bg-background px-2 text-muted-foreground">
+               <span className="bg-card px-2 text-muted-foreground"> {/* Changed from bg-background */}
                  Or continue with
                </span>
              </div>
