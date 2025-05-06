@@ -1,14 +1,13 @@
-
 'use client';
  import AppLayout from '@/components/layout/AppLayout';
  import { Button } from '@/components/ui/button';
  import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
  import { useRouter } from 'next/navigation';
  import { useAuth } from '@/hooks/useAuth';
- import { History, CheckCircle2, XCircle, Hourglass, PauseCircle, Trash2 } from 'lucide-react';
+ import { History, CheckCircle2, XCircle, Hourglass, PauseCircle, Trash2, Play } from 'lucide-react'; 
  import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
  import { GameSchema, type Game } from '@/lib/firebaseTypes';
- import { collection, query, where, orderBy, limit, writeBatch, getDocs } from 'firebase/firestore';
+ import { collection, query, where, orderBy, limit, writeBatch, getDocs, doc, deleteDoc } from 'firebase/firestore'; 
  import { getFirebase } from '@/firebase';
  import { Skeleton } from '@/components/ui/skeleton';
  import { Badge } from '@/components/ui/badge';
@@ -35,7 +34,7 @@ import React from 'react';
      case 'lost':
        return <XCircle className="h-5 w-5 text-red-500" />;
      case 'in-progress':
-       return <Hourglass className="h-5 w-5 text-yellow-500 animate-spin" />; // Keep spin for in-progress
+       return <Hourglass className="h-5 w-5 text-yellow-500 animate-spin" />;
      case 'quit':
        return <PauseCircle className="h-5 w-5 text-orange-500" />;
      default:
@@ -57,7 +56,7 @@ import React from 'react';
       text = "Defeat";
       break;
     case 'in-progress':
-      variant = "secondary";
+      variant = "secondary"; 
       text = "In Progress";
       break;
     case 'quit':
@@ -65,7 +64,7 @@ import React from 'react';
       text = "Quit";
       break;
   }
-  return <Badge variant={variant} className={result === 'won' ? 'bg-green-500 hover:bg-green-600 text-white' : ''}>{text}</Badge>;
+  return <Badge variant={variant} className={result === 'won' ? 'bg-green-500 hover:bg-green-600 text-white' : (result === 'in-progress' ? 'bg-yellow-500 text-black hover:bg-yellow-600' : '') }>{text}</Badge>;
 };
 
 
@@ -75,24 +74,50 @@ import React from 'react';
     const { firestore } = getFirebase();
     const { toast } = useToast(); 
     const [isClearing, setIsClearing] = React.useState(false);
+    const [isDeleting, setIsDeleting] = React.useState<string | null>(null); 
 
     const gameConstraints = user ? [
         where('userId', '==', user.uid),
-        orderBy('startTime', 'desc'),
-        limit(20) 
+        orderBy('startTime', 'desc'), 
     ] : [];
 
     const { data: games, loading: gamesLoading, error: gamesError, refetch: refetchGames } = useFirestoreCollection<Game>(
         'games', 
         GameSchema,
         gameConstraints,
-        !user // Disable fetching if no user
+        !user 
     );
     
 
-    const handleViewGame = (gameId: string) => {
-      toast({ title: "Coming Soon", description: "Game replay functionality is not yet implemented."});
+    const handlePlayOrViewGame = (game: Game) => {
+      if (game.result === 'in-progress') {
+        router.push('/play'); 
+      } else if (game.result === 'won' || game.result === 'lost') {
+        toast({ title: "Replay Coming Soon", description: "Game replay functionality is not yet implemented."});
+      } else if (game.result === 'quit') {
+         toast({ title: "Game Quit", description: "This game was quit and cannot be replayed or continued."});
+      }
     };
+    
+    const handleDeleteGame = async (gameId: string) => {
+        if (!user || !firestore) {
+            toast({ title: "Error", description: "Cannot delete game.", variant: "destructive" });
+            return;
+        }
+        setIsDeleting(gameId);
+        try {
+            const gameDocRef = doc(firestore, 'games', gameId);
+            await deleteDoc(gameDocRef);
+            toast({ title: "Game Deleted", description: "The game has been removed from your history." });
+            refetchGames(); 
+        } catch (error) {
+            console.error("Error deleting game:", error);
+            toast({ title: "Delete Failed", description: "Could not delete the game.", variant: "destructive" });
+        } finally {
+            setIsDeleting(null);
+        }
+    };
+
 
     const handleClearHistory = async () => {
       if (!user || !firestore) {
@@ -117,7 +142,7 @@ import React from 'react';
         });
         await batch.commit();
         toast({ title: "History Cleared", description: "Your game history has been successfully deleted." });
-        refetchGames(); // Refetch to update the UI
+        refetchGames(); 
       } catch (error: any) {
         console.error("Error clearing history:", error);
         let description = "Could not clear your game history. Please try again.";
@@ -154,21 +179,21 @@ import React from 'react';
              {games.length > 0 && (
                 <AlertDialog>
                     <AlertDialogTrigger asChild>
-                        <Button variant="destructive" disabled={isClearing}>
-                            <Trash2 className="mr-2 h-4 w-4" /> {isClearing ? "Clearing..." : "Clear History"}
+                        <Button variant="destructive" disabled={isClearing || isDeleting !== null}>
+                            <Trash2 className="mr-2 h-4 w-4" /> {isClearing ? "Clearing..." : "Clear All History"}
                         </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                         <AlertDialogHeader>
                         <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete all your game history.
+                            This action cannot be undone. This will permanently delete ALL your game history.
                         </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction onClick={handleClearHistory} className="bg-destructive hover:bg-destructive/90">
-                            Yes, clear history
+                            Yes, clear all history
                         </AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>
@@ -177,8 +202,8 @@ import React from 'react';
             </div>
              <Card>
                  <CardHeader>
-                     <CardTitle>Your Recent Games</CardTitle>
-                     <CardDescription>Review details of your past Minesweeper games.</CardDescription>
+                     <CardTitle>Your Games</CardTitle>
+                     <CardDescription>Review details of your past and ongoing Minesweeper games.</CardDescription>
                  </CardHeader>
                  <CardContent>
                     {gamesLoading && (
@@ -193,7 +218,7 @@ import React from 'react';
                                         </div>
                                     </div>
                                     <Skeleton className="h-6 w-20" />
-                                    <Skeleton className="h-8 w-24" />
+                                    <Skeleton className="h-8 w-32" /> 
                                 </div>
                             ))}
                         </div>
@@ -230,24 +255,59 @@ import React from 'react';
                                         <GameStatusIcon result={game.result} />
                                         <div>
                                             <p className="font-semibold text-foreground">
-                                                {game.difficulty} - {game.result === 'won' || game.result === 'lost' ? `${(game.endTime!.toDate().getTime() - game.startTime.toDate().getTime()) / 1000}s` : (game.result === 'in-progress' ? 'In Progress' : (game.result === 'quit' ? 'Quit' : 'N/A'))}
+                                                {game.difficulty} - 
+                                                {game.result === 'won' || game.result === 'lost' 
+                                                    ? game.endTime && game.startTime ? `${Math.round((game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000)}s` : 'N/A'
+                                                    : (game.result === 'in-progress' ? 'In Progress' : (game.result === 'quit' ? 'Quit' : 'N/A'))
+                                                }
                                             </p>
                                             <p className="text-xs text-muted-foreground">
                                                 {formatDistanceToNow(game.startTime.toDate(), { addSuffix: true })}
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                                       <GameResultBadge result={game.result} />
                                       <Button 
                                           variant="outline" 
                                           size="sm" 
-                                          onClick={() => handleViewGame(game.id)}
-                                          disabled={game.result === 'in-progress' || game.result === 'quit'}
-                                          title={game.result === 'in-progress' ? "Game is still in progress" : (game.result === 'quit' ? "Game was quit" : "View Game Details")}
+                                          onClick={() => handlePlayOrViewGame(game)}
+                                          disabled={isDeleting === game.id || isClearing}
+                                          title={game.result === 'in-progress' ? "Continue this game" : (game.result === 'quit' ? "Game was quit" : "View Game Details")}
                                       >
-                                          {game.result === 'in-progress' ? 'Continue' : (game.result === 'quit' ? 'Details (Quit)' : 'Details')}
+                                          {game.result === 'in-progress' ? <Play className="mr-1 h-4 w-4" /> : null}
+                                          {game.result === 'in-progress' ? 'Continue' : (game.result === 'quit' ? 'Details' : 'Details')}
                                       </Button>
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button 
+                                                variant="destructive" 
+                                                size="sm" 
+                                                disabled={isDeleting === game.id || isClearing}
+                                                title="Delete this game entry"
+                                            >
+                                                {isDeleting === game.id ? <Hourglass className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                            </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                            <AlertDialogTitle>Delete this game?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                This action cannot be undone. This will permanently delete this game entry from your history.
+                                            </AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                            <AlertDialogCancel disabled={isDeleting === game.id}>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction 
+                                                onClick={() => handleDeleteGame(game.id)} 
+                                                className="bg-destructive hover:bg-destructive/90"
+                                                disabled={isDeleting === game.id}
+                                            >
+                                                {isDeleting === game.id ? "Deleting..." : "Yes, delete game"}
+                                            </AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
                                     </div>
                                 </li>
                             ))}
@@ -256,7 +316,7 @@ import React from 'react';
                  </CardContent>
                  {games.length > 0 && !gamesLoading && !gamesError && (
                     <CardFooter className="justify-center">
-                        <p className="text-sm text-muted-foreground">Showing last {games.length} games.</p>
+                        <p className="text-sm text-muted-foreground">Showing {games.length} game{games.length === 1 ? '' : 's'}.</p>
                     </CardFooter>
                  )}
              </Card>

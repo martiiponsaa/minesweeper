@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
@@ -11,6 +10,7 @@ import {
   toggleFlag,
   checkWinCondition,
   getRemainingMines,
+  calculateAdjacentMines, // Ensure this is imported if used for loaded boards
 } from '@/lib/minesweeper';
 import { DIFFICULTY_LEVELS, type DifficultyKey, type DifficultySetting } from '@/config/minesweeperSettings';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/alert-dialog"
 
 
-// Expose internal game status for PlayPage
 export type InternalGameStatus = 'won' | 'lost' | 'quit';
 
 
@@ -34,44 +33,122 @@ interface GameBoardProps {
   difficultyKey: DifficultyKey;
   onGameEnd?: (status: InternalGameStatus, time: number, boardState: string) => void; 
   isGuest: boolean;
+  initialBoardState?: string; 
+  initialTimeElapsed?: number; 
 }
 
 export interface GameBoardRef {
   getCurrentBoardState: () => string;
   getCurrentTimeElapsed: () => number;
+  resetBoardToInitial: () => void; 
 }
 
 
-const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ difficultyKey, onGameEnd, isGuest }, ref) => {
+const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ 
+  difficultyKey, 
+  onGameEnd, 
+  isGuest,
+  initialBoardState,
+  initialTimeElapsed = 0 
+}, ref) => {
   const [difficulty, setDifficulty] = useState<DifficultySetting>(DIFFICULTY_LEVELS[difficultyKey]);
-  const [board, setBoard] = useState<BoardState>(() => createInitialBoard(difficulty.rows, difficulty.cols));
-  const [gameStatus, setGameStatus] = useState<GameStatus>('ready');
-  const [minesRemaining, setMinesRemaining] = useState<number>(difficulty.mines);
-  const [timeElapsed, setTimeElapsed] = useState<number>(0);
-  const [firstClick, setFirstClick] = useState<boolean>(true);
-  const [revealedCellsCount, setRevealedCellsCount] = useState<number>(0);
+  
+  const [board, setBoard] = useState<BoardState>(() => {
+    if (initialBoardState) {
+      try {
+        const parsedBoard = JSON.parse(initialBoardState) as BoardState;
+        if (Array.isArray(parsedBoard) && parsedBoard.length > 0 && Array.isArray(parsedBoard[0])) {
+            // Further validation: ensure cells have expected properties
+            if (parsedBoard.every(row => Array.isArray(row) && row.every(cell => typeof cell.isRevealed === 'boolean'))) {
+                 // If mines are not calculated on the loaded board, do it now.
+                 // This assumes initialBoardState might just be revealed/flagged/mine status without adjacentMines.
+                 // If adjacentMines ARE in initialBoardState, this might be redundant but harmless.
+                return calculateAdjacentMines(parsedBoard, parsedBoard.length, parsedBoard[0].length);
+            }
+        }
+        console.warn("Invalid initialBoardState structure, falling back to new board.");
+      } catch (e) {
+        console.error("Error parsing initialBoardState, falling back to new board:", e);
+      }
+    }
+    return createInitialBoard(DIFFICULTY_LEVELS[difficultyKey].rows, DIFFICULTY_LEVELS[difficultyKey].cols);
+  });
+
+  const [gameStatus, setGameStatus] = useState<GameStatus>(initialBoardState ? 'playing' : 'ready');
+  const [minesRemaining, setMinesRemaining] = useState<number>(() => {
+      const currentDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
+      // Use the 'board' state variable which has already processed initialBoardState
+      return getRemainingMines(board, currentDifficultySettings.mines);
+  });
+  const [timeElapsed, setTimeElapsed] = useState<number>(initialTimeElapsed);
+  const [firstClick, setFirstClick] = useState<boolean>(!initialBoardState);
+  const [revealedCellsCount, setRevealedCellsCount] = useState<number>(() => {
+    // Use the 'board' state variable for calculation
+    let count = 0;
+    board.forEach(row => row.forEach(cell => {
+        if (cell.isRevealed && !cell.isMine) count++;
+    }));
+    return count;
+  });
+
   const [showDialog, setShowDialog] = useState<boolean>(false);
   const [dialogMessage, setDialogMessage] = useState<{title: string, description: string, icon?: React.ReactNode}>({title: '', description: ''});
 
 
-  const resetGame = useCallback((keepDialogMessage = false) => {
-    const newDifficulty = DIFFICULTY_LEVELS[difficultyKey];
-    setDifficulty(newDifficulty);
-    setBoard(createInitialBoard(newDifficulty.rows, newDifficulty.cols));
+  const resetGameInternals = useCallback((newDifficultyKey: DifficultyKey, keepDialog = false) => {
+    const newDifficultySettings = DIFFICULTY_LEVELS[newDifficultyKey];
+    setDifficulty(newDifficultySettings);
+    setBoard(createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols));
     setGameStatus('ready');
-    setMinesRemaining(newDifficulty.mines);
+    setMinesRemaining(newDifficultySettings.mines);
     setTimeElapsed(0);
     setFirstClick(true);
     setRevealedCellsCount(0);
-    if (!keepDialogMessage) {
+    if (!keepDialog) {
       setShowDialog(false);
     }
-  }, [difficultyKey]);
+  }, []);
+
 
   useEffect(() => {
-    resetGame();
-  }, [difficultyKey, resetGame]);
+    const newDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
+    setDifficulty(newDifficultySettings);
 
+    if (initialBoardState) {
+        try {
+            const parsedBoardInput = JSON.parse(initialBoardState) as BoardState;
+             // Validate structure before using
+            if (Array.isArray(parsedBoardInput) && 
+                parsedBoardInput.length === newDifficultySettings.rows && 
+                parsedBoardInput[0].length === newDifficultySettings.cols &&
+                parsedBoardInput.every(row => Array.isArray(row) && row.every(cell => typeof cell.isRevealed === 'boolean'))) {
+
+                // Recalculate adjacent mines based on the loaded mine positions
+                // This ensures adjacentMines are correct even if not perfectly stored.
+                const boardWithCalculatedMines = calculateAdjacentMines(parsedBoardInput, newDifficultySettings.rows, newDifficultySettings.cols);
+                setBoard(boardWithCalculatedMines);
+                setMinesRemaining(getRemainingMines(boardWithCalculatedMines, newDifficultySettings.mines));
+                setGameStatus('playing'); 
+                setFirstClick(false); 
+                setTimeElapsed(initialTimeElapsed || 0);
+
+                let revealed = 0;
+                boardWithCalculatedMines.forEach(row => row.forEach(cell => {
+                    if (cell.isRevealed && !cell.isMine) revealed++;
+                }));
+                setRevealedCellsCount(revealed);
+            } else {
+                 resetGameInternals(difficultyKey);
+            }
+        } catch (e) {
+            console.error("Error processing initialBoardState on difficulty/prop change:", e);
+            resetGameInternals(difficultyKey);
+        }
+    } else {
+        resetGameInternals(difficultyKey);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [difficultyKey, initialBoardState, initialTimeElapsed]); 
 
   useEffect(() => {
     let timerId: NodeJS.Timeout | undefined;
@@ -89,15 +166,20 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ difficultyKey, onG
     }
 
     let currentBoard = board;
-    if (firstClick) {
+    if (firstClick) { 
       currentBoard = placeMines(board, difficulty.rows, difficulty.cols, difficulty.mines, x, y);
-      setFirstClick(false);
+      setFirstClick(false); 
       setGameStatus('playing');
     }
 
     const { newBoard, gameOver, cellsRevealedCount: newlyRevealed } = revealCell(currentBoard, difficulty.rows, difficulty.cols, x, y);
     setBoard(newBoard);
-    setRevealedCellsCount(prev => prev + newlyRevealed);
+    // Ensure revealedCellsCount is accurately updated based on the state of newBoard
+    let currentRevealedCount = 0;
+    newBoard.forEach(row => row.forEach(cell => {
+      if (cell.isRevealed && !cell.isMine) currentRevealedCount++;
+    }));
+    setRevealedCellsCount(currentRevealedCount);
 
 
     if (gameOver) {
@@ -120,27 +202,23 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ difficultyKey, onG
     if (gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isRevealed) {
       return;
     }
-    if (gameStatus === 'ready' && !firstClick) { // Check !firstClick to avoid starting timer if board not initialized
+    
+    let currentBoard = board; 
+    if (gameStatus === 'ready' && firstClick) {
+        currentBoard = placeMines(board, difficulty.rows, difficulty.cols, difficulty.mines, x, y);
+        // No need to setBoard here, placeMines returns the new board state.
+        // It will be set after toggling flag.
+        setFirstClick(false);   
         setGameStatus('playing'); 
-    } else if (gameStatus === 'ready' && firstClick) {
-      // If it's the very first interaction and it's a flag, we should also init the board
-      // This typically shouldn't happen if click is the first action, but to be safe:
-      const initializedBoard = placeMines(board, difficulty.rows, difficulty.cols, difficulty.mines, x, y);
-      setBoard(initializedBoard);
-      setFirstClick(false);
-      setGameStatus('playing');
-      // Then toggle the flag on the now initialized board
-      const newBoardAfterFlag = toggleFlag(initializedBoard, x, y);
-      setBoard(newBoardAfterFlag);
-      setMinesRemaining(getRemainingMines(newBoardAfterFlag, difficulty.mines));
-      return;
+    } else if (gameStatus === 'ready' && !firstClick) { 
+        setGameStatus('playing');
     }
 
-
-    const newBoard = toggleFlag(board, x, y);
-    setBoard(newBoard);
-    setMinesRemaining(getRemainingMines(newBoard, difficulty.mines));
+    const newBoardAfterFlag = toggleFlag(currentBoard, x, y);
+    setBoard(newBoardAfterFlag);
+    setMinesRemaining(getRemainingMines(newBoardAfterFlag, difficulty.mines));
   };
+
 
   const getGameStatusIcon = () => {
     if (gameStatus === 'won') return <PartyPopper className="h-8 w-8 text-yellow-500" />;
@@ -162,6 +240,9 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ difficultyKey, onG
   useImperativeHandle(ref, () => ({
     getCurrentBoardState: () => JSON.stringify(board),
     getCurrentTimeElapsed: () => timeElapsed,
+    resetBoardToInitial: () => { 
+        resetGameInternals(difficultyKey);
+    }
   }));
 
 
@@ -172,7 +253,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ difficultyKey, onG
           <FlagIcon className="mr-2 h-5 w-5 text-red-500" />
           <span className="text-foreground">{String(minesRemaining).padStart(3, '0')}</span>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => resetGame()} className="hover:bg-accent">
+        <Button variant="ghost" size="icon" onClick={() => resetGameInternals(difficultyKey)} className="hover:bg-accent">
           {getGameStatusIcon()}
         </Button>
         <div className="flex items-center text-lg font-semibold">
@@ -190,7 +271,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ difficultyKey, onG
         {board.map((row, y) =>
           row.map((cell, x) => (
             <CellComponent
-              key={`${y}-${x}`}
+              key={`${y}-${x}-${gameStatus}-${cell.isRevealed}-${cell.isFlagged}-${cell.isMine}-${cell.adjacentMines}`} 
               cell={cell}
               onClick={() => handleCellClick(x, y)}
               onContextMenu={(e) => handleCellContextMenu(e, x, y)}
@@ -212,7 +293,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ difficultyKey, onG
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={() => resetGame(true)}>Play Again</AlertDialogAction>
+            <AlertDialogAction onClick={() => resetGameInternals(difficultyKey, true)}>Play Again</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
