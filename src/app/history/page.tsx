@@ -13,7 +13,7 @@
  import { Skeleton } from '@/components/ui/skeleton';
  import { Badge } from '@/components/ui/badge';
  import { formatDistanceToNow } from 'date-fns';
- import { useToast } from '@/hooks/use-toast'; // Import useToast
+ import { useToast } from '@/hooks/use-toast'; 
 
 
  const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
@@ -61,6 +61,7 @@
     const router = useRouter();
     const { user } = useAuth();
     const { firestore } = getFirebase();
+    const { toast } = useToast(); 
 
     const gameConstraints = user ? [
         where('userId', '==', user.uid),
@@ -73,7 +74,7 @@
         GameSchema,
         gameConstraints
     );
-    const { toast } = useToast(); // For the handleViewGame placeholder
+    
 
     const handleViewGame = (gameId: string) => {
       // TODO: Implement a page or modal to view detailed game state/replay
@@ -123,7 +124,16 @@
                     )}
                     {!gamesLoading && gamesError && (
                         <div className="text-center text-red-500 py-10">
-                            <p>Error loading game history: {gamesError.message}</p>
+                            <p className="font-semibold">Error loading game history:</p>
+                            <p className="mb-2">{gamesError.message}</p>
+                            {gamesError.message.includes("The query requires an index") && (
+                                <p className="text-sm text-muted-foreground">
+                                    A Firestore index is needed for this query. If you're an administrator, 
+                                    you can create it in your Firebase console under Firestore Database &gt; Indexes.
+                                    The required index is for the 'games' collection, with fields: 
+                                    'userId' (ascending) and 'startTime' (descending).
+                                </p>
+                            )}
                         </div>
                     )}
                     {!gamesLoading && !gamesError && games.length === 0 && (
