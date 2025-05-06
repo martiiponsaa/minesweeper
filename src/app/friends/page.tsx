@@ -7,7 +7,7 @@
  import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
  import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
  import { Separator } from '@/components/ui/separator';
- import { UserPlus, Check, X } from 'lucide-react';
+ import { UserPlus, Check, X, Users } from 'lucide-react'; // Added Users icon
  import { useState } from 'react';
  import { useRouter } from 'next/navigation'; // Import useRouter
 
