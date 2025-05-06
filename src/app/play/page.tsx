@@ -218,14 +218,19 @@ export default function PlayPage() {
     }
   };
 
-  const handleRestartGame = () => {
-    if (user && activeGameIdRef.current && firestore && !gameResolvedRef.current) {
-        const gameDocRef = doc(firestore, 'games', activeGameIdRef.current);
-        deleteDoc(gameDocRef)
-            .then(() => {
-                console.log("Previous in-progress game deleted on restart.");
-            })
-            .catch(error => console.error("Error deleting previous game on restart:", error));
+  const handleRestartGame = async () => {
+    if (user && activeGameIdRef.current && firestore) {
+        // If the current game (activeGameIdRef.current) was loaded and is now being restarted,
+        // delete its entry from Firestore.
+        try {
+            const gameDocRef = doc(firestore, 'games', activeGameIdRef.current);
+            await deleteDoc(gameDocRef);
+            toast({ title: "Game Restarted", description: "The previous in-progress game instance was removed from history." });
+            console.log("Previous in-progress game deleted on restart.");
+        } catch (error) {
+            console.error("Error deleting previous game on restart:", error);
+            toast({ title: "Error", description: "Could not remove the previous game instance from history.", variant: "destructive" });
+        }
     }
     
     setGameResolved(false); 
@@ -236,10 +241,11 @@ export default function PlayPage() {
       gameBoardRef.current.resetBoardToInitial();
     }
     
-    setShowBoard(true); 
-    setGameKey(prevKey => prevKey + 1); 
+    // setShowBoard(true); // handleStartGame will set this
+    // setGameKey(prevKey => prevKey + 1); // handleStartGame will set this
     
-    handleStartGame();
+    // Start a new game, which will create a new Firestore entry
+    await handleStartGame();
   };
   
   const handleSaveGame = useCallback(async (isAutoSave = false) => {
@@ -276,9 +282,10 @@ export default function PlayPage() {
       startTime: startTimeForUpdate, 
       difficulty: DIFFICULTY_LEVELS[selectedDifficultyKey].name, 
       endTime: null, // Explicitly set endTime to null for in-progress saves
+      lastSavedTime: Timestamp.now(),
     };
     
-    setGameData(prev => prev ? {...prev, ...gameDataToUpdate, lastSavedTime: Timestamp.now() } as Game : null);
+    setGameData(prev => prev ? {...prev, ...gameDataToUpdate } as Game : null);
 
 
     try {
@@ -326,10 +333,13 @@ export default function PlayPage() {
   const handleGameEnd = async (status: InternalGameStatus, time: number, boardState: string) => {
     setGameResolved(true); 
     if (!user || !activeGameIdRef.current) { 
-      setShowBoard(false); 
-      setActiveGameId(null);
-      setGameData(null);
-      setHasLoadedGame(false); 
+      // setShowBoard(false); // Don't hide board, user should see the final state
+      // setActiveGameId(null); // Don't clear activeGameId yet, needed for saving
+      // setGameData(null); // Don't clear game data yet
+      // setHasLoadedGame(false); // Don't reset this until after saving/quitting etc.
+      if (status === 'quit') { // Handle explicit quit from GameBoard if it sends 'quit'
+          // This case might be redundant if quit is handled by PlayPage's handleQuitGame
+      }
       return;
     }
     if (!firestore) {
@@ -358,6 +368,8 @@ export default function PlayPage() {
     } finally {
       setIsSavingOrStarting(false);
       setHasLoadedGame(false); 
+      // Consider if activeGameId and gameData should be cleared here or if user might want to start new game
+      // For now, let them exist so they can click "Start Game" to clear and start fresh.
     }
   };
 
@@ -404,22 +416,27 @@ export default function PlayPage() {
               <Label htmlFor="difficulty-select">Difficulty</Label>
               <Select 
                 value={selectedDifficultyKey} 
-                onValueChange={(value) => {
+                onValueChange={async (value) => {
                     if (user && activeGameIdRef.current && !gameResolvedRef.current && firestore) {
-                        const gameDocRef = doc(firestore, 'games', activeGameIdRef.current);
-                        updateDoc(gameDocRef, { result: 'quit', endTime: Timestamp.now(), gameState: gameBoardRef.current?.getCurrentBoardState() || "QUIT_ON_DIFFICULTY_CHANGE" })
-                            .then(() => {
-                                setActiveGameId(null); 
-                                setGameData(null);    
-                            })
-                            .catch(err => console.error("Error quitting game on difficulty change:", err));
+                       try {
+                            const gameDocRef = doc(firestore, 'games', activeGameIdRef.current);
+                            await updateDoc(gameDocRef, { 
+                                result: 'quit', 
+                                endTime: Timestamp.now(), 
+                                gameState: gameBoardRef.current?.getCurrentBoardState() || "QUIT_ON_DIFFICULTY_CHANGE" 
+                            });
+                            setActiveGameId(null); 
+                            setGameData(null); 
+                       } catch (err) {
+                            console.error("Error quitting game on difficulty change:", err);
+                            toast({title: "Error", description: "Failed to quit previous game.", variant: "destructive"});
+                       }
                     }
                     setSelectedDifficultyKey(value as DifficultyKey);
                     setShowBoard(false); 
-                    setGameResolved(true); // Mark previous as resolved to allow new game start
-                    setGameData(null); // Clear old game data
+                    setGameResolved(true); 
+                    setGameData(null); 
                 }} 
-                // Disable if saving, or if board shown, active game, user logged in, AND current gameData's difficulty matches selected
                 disabled={isSavingOrStarting || (showBoard && !!activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name)}
                 title={ (showBoard && !!activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name) ? "Game in progress. To change difficulty, first Quit or Restart, then select new difficulty and Start Game." : "Select difficulty"}
               >
