@@ -48,7 +48,8 @@ export function getFirebase() {
 
     try {
       console.log(`Attempting to connect to Firestore emulator at ${firestoreEmulatorHost}:${firestoreEmulatorPort}`);
-      connectFirestoreEmulator(firestoreInstance, firestoreEmulatorHost, firestoreEmulatorPort, { disableWarnings: true });
+      // Removed disableWarnings as it's not a valid option here
+      connectFirestoreEmulator(firestoreInstance, firestoreEmulatorHost, firestoreEmulatorPort);
       console.log('Successfully configured Firestore emulator connection.');
     } catch (error) {
       console.error('Failed to configure Firestore emulator connection:', error);
