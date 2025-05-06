@@ -26,9 +26,13 @@ import {
 } from "@/components/ui/alert-dialog"
 
 
+// Expose internal game status for PlayPage
+export type InternalGameStatus = 'won' | 'lost' | 'quit';
+
+
 interface GameBoardProps {
   difficultyKey: DifficultyKey;
-  onGameEnd?: (status: 'won' | 'lost' | 'quit', time: number, boardState: string) => void; 
+  onGameEnd?: (status: InternalGameStatus, time: number, boardState: string) => void; 
   isGuest: boolean;
 }
 
@@ -116,9 +120,22 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ difficultyKey, onG
     if (gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isRevealed) {
       return;
     }
-    if (gameStatus === 'ready') {
-        setGameStatus('playing'); // Start timer on first flag if game hasn't started
+    if (gameStatus === 'ready' && !firstClick) { // Check !firstClick to avoid starting timer if board not initialized
+        setGameStatus('playing'); 
+    } else if (gameStatus === 'ready' && firstClick) {
+      // If it's the very first interaction and it's a flag, we should also init the board
+      // This typically shouldn't happen if click is the first action, but to be safe:
+      const initializedBoard = placeMines(board, difficulty.rows, difficulty.cols, difficulty.mines, x, y);
+      setBoard(initializedBoard);
+      setFirstClick(false);
+      setGameStatus('playing');
+      // Then toggle the flag on the now initialized board
+      const newBoardAfterFlag = toggleFlag(initializedBoard, x, y);
+      setBoard(newBoardAfterFlag);
+      setMinesRemaining(getRemainingMines(newBoardAfterFlag, difficulty.mines));
+      return;
     }
+
 
     const newBoard = toggleFlag(board, x, y);
     setBoard(newBoard);
@@ -131,7 +148,6 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ difficultyKey, onG
     return <Smile className="h-8 w-8 text-foreground" />;
   };
   
-  // Dynamic grid styling based on number of columns
   const getGridStyle = () => {
     let cellSize = "minmax(20px, 1fr)";
     if (difficulty.cols > 20) cellSize = "minmax(18px, 1fr)";
@@ -197,7 +213,6 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ difficultyKey, onG
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => resetGame(true)}>Play Again</AlertDialogAction>
-            {/* <AlertDialogCancel onClick={() => setShowDialog(false)}>Close</AlertDialogCancel> */}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

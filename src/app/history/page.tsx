@@ -5,15 +5,27 @@
  import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
  import { useRouter } from 'next/navigation';
  import { useAuth } from '@/hooks/useAuth';
- import { History, CheckCircle2, XCircle, Hourglass, PauseCircle } from 'lucide-react';
+ import { History, CheckCircle2, XCircle, Hourglass, PauseCircle, Trash2 } from 'lucide-react';
  import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
  import { GameSchema, type Game } from '@/lib/firebaseTypes';
- import { collection, query, where, orderBy, limit } from 'firebase/firestore';
+ import { collection, query, where, orderBy, limit, writeBatch, getDocs } from 'firebase/firestore';
  import { getFirebase } from '@/firebase';
  import { Skeleton } from '@/components/ui/skeleton';
  import { Badge } from '@/components/ui/badge';
  import { formatDistanceToNow } from 'date-fns';
  import { useToast } from '@/hooks/use-toast'; 
+ import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import React from 'react';
 
 
  const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
@@ -23,7 +35,7 @@
      case 'lost':
        return <XCircle className="h-5 w-5 text-red-500" />;
      case 'in-progress':
-       return <Hourglass className="h-5 w-5 text-yellow-500 animate-spin" />;
+       return <Hourglass className="h-5 w-5 text-yellow-500 animate-spin" />; // Keep spin for in-progress
      case 'quit':
        return <PauseCircle className="h-5 w-5 text-orange-500" />;
      default:
@@ -37,7 +49,7 @@
 
   switch (result) {
     case 'won':
-      variant = "default"; // Using primary for win
+      variant = "default"; 
       text = "Victory";
       break;
     case 'lost':
@@ -53,7 +65,7 @@
       text = "Quit";
       break;
   }
-  return <Badge variant={variant}>{text}</Badge>;
+  return <Badge variant={variant} className={result === 'won' ? 'bg-green-500 hover:bg-green-600 text-white' : ''}>{text}</Badge>;
 };
 
 
@@ -62,23 +74,62 @@
     const { user } = useAuth();
     const { firestore } = getFirebase();
     const { toast } = useToast(); 
+    const [isClearing, setIsClearing] = React.useState(false);
 
     const gameConstraints = user ? [
         where('userId', '==', user.uid),
         orderBy('startTime', 'desc'),
-        limit(20) // Get last 20 games
+        limit(20) 
     ] : [];
 
-    const { data: games, loading: gamesLoading, error: gamesError } = useFirestoreCollection<Game>(
-        'games', // Collection path
+    const { data: games, loading: gamesLoading, error: gamesError, refetch: refetchGames } = useFirestoreCollection<Game>(
+        'games', 
         GameSchema,
-        gameConstraints
+        gameConstraints,
+        !user // Disable fetching if no user
     );
     
 
     const handleViewGame = (gameId: string) => {
-      // TODO: Implement a page or modal to view detailed game state/replay
       toast({ title: "Coming Soon", description: "Game replay functionality is not yet implemented."});
+    };
+
+    const handleClearHistory = async () => {
+      if (!user || !firestore) {
+        toast({ title: "Error", description: "Cannot clear history.", variant: "destructive" });
+        return;
+      }
+      setIsClearing(true);
+      try {
+        const gamesCollectionRef = collection(firestore, 'games');
+        const q = query(gamesCollectionRef, where('userId', '==', user.uid));
+        const querySnapshot = await getDocs(q);
+        
+        if (querySnapshot.empty) {
+            toast({ title: "No History", description: "There is no game history to clear." });
+            setIsClearing(false);
+            return;
+        }
+
+        const batch = writeBatch(firestore);
+        querySnapshot.forEach((doc) => {
+          batch.delete(doc.ref);
+        });
+        await batch.commit();
+        toast({ title: "History Cleared", description: "Your game history has been successfully deleted." });
+        refetchGames(); // Refetch to update the UI
+      } catch (error: any) {
+        console.error("Error clearing history:", error);
+        let description = "Could not clear your game history. Please try again.";
+        if (error.message?.includes("firestore/permission-denied")) {
+            description = "Permission denied. You might not have the rights to delete this data.";
+        } else if (error.message?.includes("The query requires an index")) {
+             description = "A Firestore index might be missing. Contact support if this persists.";
+        }
+        toast({ title: "Clear History Failed", description, variant: "destructive" });
+      } finally {
+        setIsClearing(false);
+      }
     };
 
 
@@ -98,7 +149,32 @@
            </div>
          ) : (
            <>
-             <h1 className="text-3xl font-bold text-foreground mb-8">Match History</h1>
+            <div className="flex justify-between items-center mb-8">
+             <h1 className="text-3xl font-bold text-foreground">Match History</h1>
+             {games.length > 0 && (
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="destructive" disabled={isClearing}>
+                            <Trash2 className="mr-2 h-4 w-4" /> {isClearing ? "Clearing..." : "Clear History"}
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete all your game history.
+                        </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleClearHistory} className="bg-destructive hover:bg-destructive/90">
+                            Yes, clear history
+                        </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+             )}
+            </div>
              <Card>
                  <CardHeader>
                      <CardTitle>Your Recent Games</CardTitle>
@@ -126,14 +202,17 @@
                         <div className="text-center text-red-500 py-10">
                             <p className="font-semibold">Error loading game history:</p>
                             <p className="mb-2">{gamesError.message}</p>
-                            {gamesError.message.includes("The query requires an index") && (
+                            {(gamesError as any)?.code === 'failed-precondition' && (gamesError.message.includes("The query requires an index") || gamesError.message.includes("requires an index")) && (
                                 <p className="text-sm text-muted-foreground">
-                                    A Firestore index is needed for this query. If you're an administrator, 
+                                    A Firestore index is needed for this query. If you are the developer, 
                                     you can create it in your Firebase console under Firestore Database &gt; Indexes.
-                                    The required index is for the 'games' collection, with fields: 
-                                    'userId' (ascending) and 'startTime' (descending).
+                                    <br />Collection: <strong>games</strong>
+                                    <br />Fields: <strong>userId</strong> (Ascending), <strong>startTime</strong> (Descending)
                                 </p>
                             )}
+                             {!( (gamesError as any)?.code === 'failed-precondition' && (gamesError.message.includes("The query requires an index") || gamesError.message.includes("requires an index"))) && (
+                                 <p className="text-sm text-muted-foreground">Please try again later or contact support if the issue persists.</p>
+                             )}
                         </div>
                     )}
                     {!gamesLoading && !gamesError && games.length === 0 && (
@@ -151,7 +230,7 @@
                                         <GameStatusIcon result={game.result} />
                                         <div>
                                             <p className="font-semibold text-foreground">
-                                                {game.difficulty} - {game.result === 'won' || game.result === 'lost' ? `${(game.endTime!.toDate().getTime() - game.startTime.toDate().getTime()) / 1000}s` : (game.result === 'in-progress' ? 'Ongoing' : 'N/A')}
+                                                {game.difficulty} - {game.result === 'won' || game.result === 'lost' ? `${(game.endTime!.toDate().getTime() - game.startTime.toDate().getTime()) / 1000}s` : (game.result === 'in-progress' ? 'In Progress' : (game.result === 'quit' ? 'Quit' : 'N/A'))}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
                                                 {formatDistanceToNow(game.startTime.toDate(), { addSuffix: true })}
@@ -164,10 +243,10 @@
                                           variant="outline" 
                                           size="sm" 
                                           onClick={() => handleViewGame(game.id)}
-                                          disabled={game.result === 'in-progress' || game.result === 'quit'} // Allow loading saved games later
+                                          disabled={game.result === 'in-progress' || game.result === 'quit'}
                                           title={game.result === 'in-progress' ? "Game is still in progress" : (game.result === 'quit' ? "Game was quit" : "View Game Details")}
                                       >
-                                          {game.result === 'in-progress' ? 'Continue' : 'Details'}
+                                          {game.result === 'in-progress' ? 'Continue' : (game.result === 'quit' ? 'Details (Quit)' : 'Details')}
                                       </Button>
                                     </div>
                                 </li>
@@ -175,7 +254,7 @@
                         </ul>
                     )}
                  </CardContent>
-                 {games.length > 0 && (
+                 {games.length > 0 && !gamesLoading && !gamesError && (
                     <CardFooter className="justify-center">
                         <p className="text-sm text-muted-foreground">Showing last {games.length} games.</p>
                     </CardFooter>
