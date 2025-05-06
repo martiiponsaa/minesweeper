@@ -33,6 +33,10 @@ export const MoveSchema = z.object({
 
 export type Move = z.infer<typeof MoveSchema>;
 
+// Game Result Schema and Type
+export const GameResultSchema = z.enum(['won', 'lost', 'in-progress', 'quit']);
+export type GameResult = z.infer<typeof GameResultSchema>;
+
 // Game Entity
 export const GameSchema = z.object({
   id: z.string(),
@@ -42,7 +46,7 @@ export const GameSchema = z.object({
   gameState: z.string(), // Serialized game board state (JSON string or similar)
   difficulty: z.string(), // e.g., 'easy', 'medium', 'hard'
   moves: z.array(MoveSchema).optional(),
-  result: z.string().nullable(), // e.g., 'won', 'lost', 'quit'
+  result: GameResultSchema.nullable(), 
 });
 
 export type Game = z.infer<typeof GameSchema>;

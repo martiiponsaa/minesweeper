@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import CellComponent from './Cell';
 import type { BoardState, CellState, GameStatus } from '@/lib/minesweeper';
 import {
@@ -28,11 +28,17 @@ import {
 
 interface GameBoardProps {
   difficultyKey: DifficultyKey;
-  onGameEnd?: (status: 'won' | 'lost', time: number) => void; // For saving stats later
+  onGameEnd?: (status: 'won' | 'lost' | 'quit', time: number, boardState: string) => void; 
   isGuest: boolean;
 }
 
-const GameBoard: React.FC<GameBoardProps> = ({ difficultyKey, onGameEnd, isGuest }) => {
+export interface GameBoardRef {
+  getCurrentBoardState: () => string;
+  getCurrentTimeElapsed: () => number;
+}
+
+
+const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ difficultyKey, onGameEnd, isGuest }, ref) => {
   const [difficulty, setDifficulty] = useState<DifficultySetting>(DIFFICULTY_LEVELS[difficultyKey]);
   const [board, setBoard] = useState<BoardState>(() => createInitialBoard(difficulty.rows, difficulty.cols));
   const [gameStatus, setGameStatus] = useState<GameStatus>('ready');
@@ -44,7 +50,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ difficultyKey, onGameEnd, isGuest
   const [dialogMessage, setDialogMessage] = useState<{title: string, description: string, icon?: React.ReactNode}>({title: '', description: ''});
 
 
-  const resetGame = useCallback(() => {
+  const resetGame = useCallback((keepDialogMessage = false) => {
     const newDifficulty = DIFFICULTY_LEVELS[difficultyKey];
     setDifficulty(newDifficulty);
     setBoard(createInitialBoard(newDifficulty.rows, newDifficulty.cols));
@@ -53,7 +59,9 @@ const GameBoard: React.FC<GameBoardProps> = ({ difficultyKey, onGameEnd, isGuest
     setTimeElapsed(0);
     setFirstClick(true);
     setRevealedCellsCount(0);
-    setShowDialog(false);
+    if (!keepDialogMessage) {
+      setShowDialog(false);
+    }
   }, [difficultyKey]);
 
   useEffect(() => {
@@ -92,13 +100,13 @@ const GameBoard: React.FC<GameBoardProps> = ({ difficultyKey, onGameEnd, isGuest
       setGameStatus('lost');
       setDialogMessage({ title: 'Game Over!', description: 'You hit a mine. Better luck next time!', icon: <Frown className="h-6 w-6 text-red-500" /> });
       setShowDialog(true);
-      onGameEnd?.('lost', timeElapsed);
+      onGameEnd?.('lost', timeElapsed, JSON.stringify(newBoard));
     } else {
       if (checkWinCondition(newBoard, difficulty.rows, difficulty.cols, difficulty.mines)) {
         setGameStatus('won');
         setDialogMessage({ title: 'Congratulations!', description: 'You cleared the board!', icon: <PartyPopper className="h-6 w-6 text-yellow-500" /> });
         setShowDialog(true);
-        onGameEnd?.('won', timeElapsed);
+        onGameEnd?.('won', timeElapsed, JSON.stringify(newBoard));
       }
     }
   };
@@ -122,23 +130,23 @@ const GameBoard: React.FC<GameBoardProps> = ({ difficultyKey, onGameEnd, isGuest
     if (gameStatus === 'lost') return <Frown className="h-8 w-8 text-red-500" />;
     return <Smile className="h-8 w-8 text-foreground" />;
   };
-
-  const gridColsClass = `grid-cols-${difficulty.cols}`;
   
   // Dynamic grid styling based on number of columns
   const getGridStyle = () => {
-    // For smaller screens, we might want to limit the max width of cells
-    // This is a basic example, more sophisticated logic might be needed
     let cellSize = "minmax(20px, 1fr)";
     if (difficulty.cols > 20) cellSize = "minmax(18px, 1fr)";
     if (difficulty.cols > 25) cellSize = "minmax(16px, 1fr)";
 
-
     return {
       gridTemplateColumns: `repeat(${difficulty.cols}, ${cellSize})`,
-      maxWidth: `${difficulty.cols * 40}px`, // Max width to prevent huge boards on large screens
+      maxWidth: `${difficulty.cols * 40}px`, 
     };
   };
+
+  useImperativeHandle(ref, () => ({
+    getCurrentBoardState: () => JSON.stringify(board),
+    getCurrentTimeElapsed: () => timeElapsed,
+  }));
 
 
   return (
@@ -148,7 +156,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ difficultyKey, onGameEnd, isGuest
           <FlagIcon className="mr-2 h-5 w-5 text-red-500" />
           <span className="text-foreground">{String(minesRemaining).padStart(3, '0')}</span>
         </div>
-        <Button variant="ghost" size="icon" onClick={resetGame} className="hover:bg-accent">
+        <Button variant="ghost" size="icon" onClick={() => resetGame()} className="hover:bg-accent">
           {getGameStatusIcon()}
         </Button>
         <div className="flex items-center text-lg font-semibold">
@@ -188,7 +196,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ difficultyKey, onGameEnd, isGuest
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={resetGame}>Play Again</AlertDialogAction>
+            <AlertDialogAction onClick={() => resetGame(true)}>Play Again</AlertDialogAction>
             {/* <AlertDialogCancel onClick={() => setShowDialog(false)}>Close</AlertDialogCancel> */}
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -196,7 +204,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ difficultyKey, onGameEnd, isGuest
 
     </div>
   );
-};
+});
 
+GameBoard.displayName = 'GameBoard';
 export default GameBoard;
-
