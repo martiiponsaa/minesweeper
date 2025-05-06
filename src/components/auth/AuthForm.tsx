@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -99,7 +100,7 @@ export default function AuthForm() {
           message = 'This sign-in method is not enabled. Please contact support.';
           break;
       case 'auth/unauthorized-domain':
-          message = 'This domain is not authorized for OAuth operations. Please check Firebase console.';
+          message = 'This domain is not authorized for OAuth operations. Please check your Firebase project settings (Authentication -> Sign-in method -> Authorized domains) and add your current domain (e.g., localhost if developing locally).';
           break;
       default:
         // Keep the generic message for other errors
@@ -154,6 +155,11 @@ export default function AuthForm() {
      }
    };
 
+  // If you're getting an 'auth/unauthorized-domain' error:
+  // 1. Go to your Firebase project in the Firebase Console.
+  // 2. Navigate to Authentication -> Sign-in method.
+  // 3. Under "Authorized domains", click "Add domain".
+  // 4. Add your current domain (e.g., 'localhost' if you are testing locally, or your deployed domain).
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
     const provider = new GoogleAuthProvider();
