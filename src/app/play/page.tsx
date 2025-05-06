@@ -16,6 +16,13 @@ import { useToast } from '@/hooks/use-toast';
 import type { Game, GameResult } from '@/lib/firebaseTypes'; 
 import { GameSchema } from '@/lib/firebaseTypes';
 
+const nonJsonGameStates = [
+  "INITIAL_BOARD_STATE",
+  "QUIT_FOR_NEW_GAME",
+  "QUIT_ON_RESTART",
+  "QUIT_ON_DIFFICULTY_CHANGE",
+  "QUIT_STATE_UNKNOWN",
+];
 
 export default function PlayPage() {
   const [selectedDifficultyKey, setSelectedDifficultyKey] = useState<DifficultyKey>('medium');
@@ -232,14 +239,19 @@ export default function PlayPage() {
     if (user && activeGameIdRef.current && firestore && !gameResolvedRef.current) {
         const gameDocRef = doc(firestore, 'games', activeGameIdRef.current);
         updateDoc(gameDocRef, {
-            result: 'quit',
-            endTime: Timestamp.now(),
+            result: 'quit', // Mark as quit, but this won't be shown in history for restarts
+            // We don't set endTime, as it's a restart not a quit for history purposes
+            // Or, if we want to avoid saving restarted (quit) games in history at all,
+            // we might even delete this document or skip updating it.
+            // For now, let's assume a 'quit' here helps ensure only one 'in-progress'.
+            // But this specific 'quit' status is more of an internal state before a new game.
             gameState: gameBoardRef.current?.getCurrentBoardState() ?? "QUIT_ON_RESTART",
         }).catch(error => console.error("Error marking game as quit on restart:", error));
     }
     setGameData(null); 
     // `handleStartGame` will now correctly set up a new game, 
     // and because `gameData` is null, it won't try to load from it.
+    // It will also correctly handle marking any genuinely 'in-progress' game as 'quit'.
     handleStartGame(); 
   };
   
@@ -326,10 +338,11 @@ export default function PlayPage() {
   const handleGameEnd = async (status: InternalGameStatus, time: number, boardState: string) => {
     setGameResolved(true); 
     if (!user || !activeGameIdRef.current) { 
+      // For guests, or if somehow no active game ID, just clear local state
       setShowBoard(false); 
       setActiveGameId(null);
       setGameData(null);
-      setHasLoadedGame(false); 
+      setHasLoadedGame(false); // Allow new game next time for guest or if error occurred
       return;
     }
     if (!firestore) {
@@ -344,23 +357,34 @@ export default function PlayPage() {
       endTime: Timestamp.now(),
       result: status as GameResult, 
       gameState: boardState,
+      // Ensure startTime and difficulty are preserved from the gameData object
+      // If gameData is somehow null here (shouldn't be for logged-in user with activeGameId),
+      // then it falls back to current time/difficulty, but this path is less likely.
       startTime: gameDataRef.current?.startTime || Timestamp.now(), 
       difficulty: gameDataRef.current?.difficulty || DIFFICULTY_LEVELS[selectedDifficultyKey].name,
+      // moves: gameDataRef.current?.moves // Assuming moves are updated within GameBoard and saved via boardState
     };
     
+    // Optimistically update local gameData state
     setGameData(prev => prev ? {...prev, ...finalGameData} : null);
 
     try {
       await updateDoc(gameDocRef, finalGameData);
+      // Toast for game end (win/loss) could be handled here or by GameBoard's dialog
     } catch (error) {
       console.error("Error saving game result:", error);
       toast({ title: "Save Result Failed", description: "Could not save game result.", variant: "destructive" });
     } finally {
       setIsSavingOrStarting(false);
+      // After game ends (win/loss), we should allow a new game to be loaded or started without
+      // trying to resume this one.
       setHasLoadedGame(false); 
+      // activeGameId will be cleared if user quits or starts a new game.
+      // For a win/loss, activeGameId might remain until a new action.
     }
   };
 
+  // Auto-save on page unload/navigation for logged-in users with an active, unresolved game
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (user && activeGameIdRef.current && !gameResolvedRef.current && firestore && gameBoardRef.current) {
@@ -386,6 +410,11 @@ export default function PlayPage() {
 
   const difficultyConfig = DIFFICULTY_LEVELS[selectedDifficultyKey] || DIFFICULTY_LEVELS['medium'];
 
+  const boardInitialState = gameData?.gameState && !nonJsonGameStates.includes(gameData.gameState)
+    ? gameData.gameState
+    : undefined;
+
+
   return (
     <AppLayout>
       <div className="container mx-auto p-4 md:p-8 flex flex-col items-center">
@@ -402,18 +431,20 @@ export default function PlayPage() {
               <Select 
                 value={selectedDifficultyKey} 
                 onValueChange={(value) => {
+                    // If a game is active for a logged-in user and difficulty changes,
+                    // mark current game as quit before changing state.
                     if (user && activeGameIdRef.current && !gameResolvedRef.current && firestore) {
                         const gameDocRef = doc(firestore, 'games', activeGameIdRef.current);
                         updateDoc(gameDocRef, { result: 'quit', endTime: Timestamp.now(), gameState: gameBoardRef.current?.getCurrentBoardState() || "QUIT_ON_DIFFICULTY_CHANGE" })
                             .then(() => {
-                                setActiveGameId(null); 
-                                setGameData(null);    
+                                setActiveGameId(null); // Clear active game ID
+                                setGameData(null);    // Clear game data
                             })
                             .catch(err => console.error("Error quitting game on difficulty change:", err));
                     }
                     setSelectedDifficultyKey(value as DifficultyKey);
-                    setShowBoard(false); 
-                    setGameResolved(true); 
+                    setShowBoard(false); // Hide board to force re-render with new difficulty settings
+                    setGameResolved(true); // Mark previous game as resolved (even if quit)
                     setGameData(null); // Ensure no old game data is used if difficulty changes then new game starts
                 }} 
                 disabled={isSavingOrStarting || (showBoard && !!activeGameIdRef.current && !gameResolvedRef.current && user && !DIFFICULTY_LEVELS[selectedDifficultyKey].name.includes(gameData?.difficulty || "---"))}
@@ -434,16 +465,17 @@ export default function PlayPage() {
             <Button 
                 onClick={handleStartGame} 
                 className="w-full sm:w-auto mt-4 sm:mt-6 bg-primary hover:bg-primary/90" 
-                disabled={isSavingOrStarting || (showBoard && activeGameIdRef.current && !gameResolvedRef.current && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name)}
+                // Disable if saving, or if board shown, game active, unresolved, user exists, AND current gameData difficulty matches selected (meaning game is already running with this setting)
+                disabled={isSavingOrStarting || (showBoard && activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name)}
                 title={
-                    (showBoard && activeGameIdRef.current && !gameResolvedRef.current && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name)
+                    (showBoard && activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name)
                     ? "Game already in progress with this difficulty. Choose 'Restart' or 'Quit'." 
-                    : (showBoard && activeGameIdRef.current && !gameResolvedRef.current ? 'Start New Game (will quit current)' : 'Start Game')
+                    : (showBoard && activeGameIdRef.current && !gameResolvedRef.current && user ? 'Start New Game (will quit current)' : 'Start Game')
                 }
             >
               {/* Logic for button text: if a game is active and its difficulty matches current selection, it's effectively a "Current Game".
                   If difficulties DON'T match, it implies starting new will quit the old one with different difficulty. */}
-              {(showBoard && activeGameIdRef.current && !gameResolvedRef.current && gameData?.difficulty !== DIFFICULTY_LEVELS[selectedDifficultyKey].name) 
+              {(showBoard && activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty !== DIFFICULTY_LEVELS[selectedDifficultyKey].name) 
                 ? 'Start New (different difficulty)' 
                 : 'Start Game'}
             </Button>
@@ -465,8 +497,10 @@ export default function PlayPage() {
                 difficultyKey={selectedDifficultyKey} 
                 isGuest={!user}
                 onGameEnd={handleGameEnd}
-                initialBoardState={gameData?.gameState} 
+                initialBoardState={boardInitialState} 
                 initialTimeElapsed={
+                    // Only provide initialTimeElapsed if it's a loaded 'in-progress' game
+                    // and gameData exists with a valid startTime
                     gameData?.result === 'in-progress' && gameData.startTime 
                     ? Math.max(0, Math.floor((Timestamp.now().seconds - gameData.startTime.seconds))) // Ensure non-negative
                     : 0
