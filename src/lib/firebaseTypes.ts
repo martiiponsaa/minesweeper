@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { Timestamp } from 'firebase/firestore';
 
 // Firestore Timestamp type for Zod
-const timestampSchema = z.custom<Timestamp>((data) =&gt; data instanceof Object &amp;&amp; 'toDate' in data &amp;&amp; typeof data.toDate === 'function', {
+const timestampSchema = z.custom<Timestamp>((data) => data instanceof Object && 'toDate' in data && typeof data.toDate === 'function', {
   message: 'Expected Firestore Timestamp',
 });
 
