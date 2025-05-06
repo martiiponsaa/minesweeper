@@ -1,14 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot, DocumentSnapshot, FirestoreError, Firestore, DocumentData } from 'firebase/firestore';
-import { z, ZodSchema } from 'zod';
-import { getFirebase } from '@/firebase'; // Ensure getFirebase is client-compatible
+import {
+  doc,
+  onSnapshot,
+  DocumentSnapshot,
+  FirestoreError,
+  DocumentData,
+} from 'firebase/firestore';
+import { z, ZodError } from 'zod'; // ✅ use ZodError, not ZodSchema
+import { getFirebase } from '@/firebase';
 
 type UseFirestoreDocumentResult<T> = {
   data: T | null;
   loading: boolean;
-  error: FirestoreError | ZodSchema | null;
+  error: FirestoreError | ZodError | null;
 };
 
 export function useFirestoreDocument<T>(
@@ -18,7 +24,7 @@ export function useFirestoreDocument<T>(
 ): UseFirestoreDocumentResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<FirestoreError | ZodSchema | null>(null);
+  const [error, setError] = useState<FirestoreError | ZodError | null>(null);
   const { firestore } = getFirebase();
 
   useEffect(() => {
@@ -40,12 +46,12 @@ export function useFirestoreDocument<T>(
             setData(validatedData);
             setError(null);
           } catch (validationError) {
-             if (validationError instanceof z.ZodError) {
+            if (validationError instanceof ZodError) {
               console.error('Zod validation error:', validationError.errors);
-              setError(validationError); // Store Zod error instance
+              setError(validationError); // ✅ Correct type
             } else {
-               console.error('Error validating document data:', validationError);
-               setError(new Error('Data validation failed') as any); // Generic error for non-Zod issues
+              console.error('Error validating document data:', validationError);
+              setError(new Error('Data validation failed') as any); // Fallback generic error
             }
             setData(null);
           }
@@ -63,9 +69,8 @@ export function useFirestoreDocument<T>(
       }
     );
 
-    // Cleanup subscription on unmount
     return () => unsubscribe();
-  }, [firestore, collectionPath, docId, schema]); // Re-run effect if dependencies change
+  }, [firestore, collectionPath, docId, schema]);
 
   return { data, loading, error };
 }

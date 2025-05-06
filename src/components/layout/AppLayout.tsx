@@ -31,13 +31,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 
 const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
    const { user, signOut } = useAuth();
    const router = useRouter();
-
+   const pathname = usePathname();
+   
    const handleSignOut = async () => {
      await signOut();
      router.push('/'); // Redirect to home/login page after sign out
@@ -71,7 +72,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
         <SidebarContent className="p-2">
           <SidebarMenu>
             <SidebarMenuItem>
-               <SidebarMenuButton asChild isActive={router.pathname === '/dashboard'} tooltip="Dashboard">
+               <SidebarMenuButton asChild isActive={pathname === '/dashboard'} tooltip="Dashboard">
                 <Link href="/dashboard">
                   <Home />
                   <span>Dashboard</span>
@@ -79,7 +80,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
               </SidebarMenuButton>
             </SidebarMenuItem>
              <SidebarMenuItem>
-               <SidebarMenuButton asChild isActive={router.pathname === '/play'} tooltip="Play">
+               <SidebarMenuButton asChild isActive={pathname === '/play'} tooltip="Play">
                  <Link href="/play"> {/* Link to the game page */}
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18.5 3.5a2.12 2.12 0 0 1 3 3L7.4 21.4a2.12 2.12 0 0 1-3-3L18.5 3.5z"></path><path d="m12 2-1.9 1.9c-1.5 1.5-1.5 4 0 5.5l4.4 4.4c1.5 1.5 4 1.5 5.5 0L22 12"></path><path d="m2 12 1.9 1.9c1.5 1.5 4 1.5 5.5 0l4.4-4.4c1.5-1.5 1.5-4 0-5.5L12 2"></path><path d="M10.6 10.6 7.4 7.4"></path></svg>
                   <span>Play</span>
@@ -87,7 +88,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                </SidebarMenuButton>
              </SidebarMenuItem>
              <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={router.pathname === '/history'} tooltip="History">
+              <SidebarMenuButton asChild isActive={pathname === '/history'} tooltip="History">
                  <Link href="/history">
                    <History />
                   <span>History</span>
@@ -95,7 +96,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                </SidebarMenuButton>
              </SidebarMenuItem>
              <SidebarMenuItem>
-               <SidebarMenuButton asChild isActive={router.pathname === '/stats'} tooltip="Statistics">
+               <SidebarMenuButton asChild isActive={pathname === '/stats'} tooltip="Statistics">
                  <Link href="/stats">
                    <BarChart3 />
                   <span>Stats</span>
@@ -103,7 +104,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                </SidebarMenuButton>
              </SidebarMenuItem>
               <SidebarMenuItem>
-               <SidebarMenuButton asChild isActive={router.pathname === '/friends'} tooltip="Friends">
+               <SidebarMenuButton asChild isActive={pathname === '/friends'} tooltip="Friends">
                  <Link href="/friends">
                    <Users />
                   <span>Friends</span>
@@ -118,7 +119,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
         <SidebarFooter className="p-2">
            <SidebarMenu>
              <SidebarMenuItem>
-               <SidebarMenuButton asChild isActive={router.pathname === '/profile'} tooltip="Profile Settings">
+               <SidebarMenuButton asChild isActive={pathname === '/profile'} tooltip="Profile Settings">
                 <Link href="/profile">
                    <Settings />
                    <span>Settings</span>

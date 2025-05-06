@@ -10,12 +10,13 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInAnonymously, AuthError } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInAnonymously, AuthError, updateProfile } from 'firebase/auth';
 import { getFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { FcGoogle } from "react-icons/fc"; // Using react-icons for Google icon
 import { User as LucideUser } from 'lucide-react'; // For anonymous icon
+import { doc, setDoc } from 'firebase/firestore';
 
 // Validation Schemas
 const LoginSchema = z.object({
@@ -36,7 +37,7 @@ export default function AuthForm() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
-  const { auth } = getFirebase();
+  const { auth, firestore } = getFirebase(); // Added firestore
 
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(LoginSchema),
@@ -55,6 +56,11 @@ export default function AuthForm() {
     },
   });
 
+  const handleAuthSuccess = (message: string) => {
+    toast({ title: message });
+    router.push('/dashboard');
+  };
+
   const handleAuthError = (error: AuthError) => {
     console.error("Authentication error:", error);
     let message = 'An unexpected error occurred. Please try again.';
@@ -62,12 +68,16 @@ export default function AuthForm() {
       case 'auth/user-not-found':
       case 'auth/wrong-password':
         message = 'Invalid email or password.';
+        loginForm.setError("email", { type: "manual", message: " " }); // Clear specific field error message if general one is shown
+        loginForm.setError("password", { type: "manual", message: "Invalid email or password."});
         break;
       case 'auth/email-already-in-use':
         message = 'This email address is already in use.';
+        registerForm.setError("email", { type: "manual", message });
         break;
       case 'auth/weak-password':
         message = 'Password should be at least 6 characters.';
+        registerForm.setError("password", { type: "manual", message });
         break;
       case 'auth/popup-closed-by-user':
          message = 'Sign-in popup closed by user.';
@@ -77,6 +87,9 @@ export default function AuthForm() {
          break;
        case 'auth/popup-blocked':
           message = 'Popup blocked by browser. Please allow popups for this site.';
+          break;
+      case 'auth/too-many-requests':
+          message = 'Too many attempts. Please try again later.';
           break;
       default:
         // Keep the generic message for other errors
@@ -93,8 +106,7 @@ export default function AuthForm() {
     setIsLoading(true);
     try {
       await signInWithEmailAndPassword(auth, values.email, values.password);
-      toast({ title: 'Login Successful' });
-      router.push('/dashboard'); // Redirect to dashboard or desired page after login
+      handleAuthSuccess('Login Successful');
     } catch (error) {
       handleAuthError(error as AuthError);
     } finally {
@@ -106,12 +118,25 @@ export default function AuthForm() {
      setIsLoading(true);
      try {
        const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-       // TODO: Save username to user profile in Firestore after registration
-       // await updateProfile(userCredential.user, { displayName: values.username });
-       // await setDoc(doc(firestore, 'users', userCredential.user.uid), { username: values.username /* other fields */ });
-       console.log("Registration successful, UID:", userCredential.user.uid, "Username to save:", values.username);
-       toast({ title: 'Registration Successful' });
-        router.push('/dashboard'); // Redirect after registration
+       
+       // Update Firebase Auth profile
+       await updateProfile(userCredential.user, { displayName: values.username });
+
+       // Save initial user data to Firestore
+       const userDocRef = doc(firestore, 'users', userCredential.user.uid);
+       await setDoc(userDocRef, {
+         id: userCredential.user.uid,
+         username: values.username, // Store the chosen username
+         email: userCredential.user.email, // Store email for reference
+         profilePreferences: {
+           displayName: values.username, // Set initial display name
+           avatar: '', // Default avatar or leave empty
+         },
+         friendCodes: [], // Initialize empty array
+         friendIds: [],   // Initialize empty array
+       }, { merge: true }); // Merge to avoid overwriting if doc somehow exists
+
+       handleAuthSuccess('Registration Successful');
      } catch (error) {
        handleAuthError(error as AuthError);
      } finally {
@@ -123,9 +148,25 @@ export default function AuthForm() {
     setIsLoading(true);
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
-      toast({ title: 'Signed in with Google' });
-      router.push('/dashboard');
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Save/update user data to Firestore on Google sign-in
+      const userDocRef = doc(firestore, 'users', user.uid);
+      await setDoc(userDocRef, {
+        id: user.uid,
+        username: user.displayName || user.email?.split('@')[0] || 'google_user', // Use display name, or part of email, or a default
+        email: user.email,
+        profilePreferences: {
+          displayName: user.displayName || '',
+          avatar: user.photoURL || '',
+        },
+        // Ensure these fields exist, even if empty, to match UserSchema
+        friendCodes: [], 
+        friendIds: [],
+      }, { merge: true }); // Use merge to create or update user data
+
+      handleAuthSuccess('Signed in with Google');
     } catch (error) {
       handleAuthError(error as AuthError);
     } finally {
@@ -136,9 +177,24 @@ export default function AuthForm() {
    const handleAnonymousSignIn = async () => {
       setIsLoading(true);
       try {
-        await signInAnonymously(auth);
-        toast({ title: 'Signed in as Guest' });
-         router.push('/dashboard'); // Redirect to the game or dashboard
+        const userCredential = await signInAnonymously(auth);
+        const user = userCredential.user;
+
+         // Save initial anonymous user data to Firestore
+        const userDocRef = doc(firestore, 'users', user.uid);
+        await setDoc(userDocRef, {
+            id: user.uid,
+            username: `Guest_${user.uid.substring(0,5)}`, // Create a guest username
+            email: null, // Anonymous users don't have emails
+            profilePreferences: {
+                displayName: `Guest`,
+                avatar: '',
+            },
+            friendCodes: [],
+            friendIds: [],
+        }, { merge: true });
+        
+        handleAuthSuccess('Signed in as Guest');
       } catch (error) {
         handleAuthError(error as AuthError);
       } finally {

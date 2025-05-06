@@ -3,26 +3,18 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "emulators": {
-    "auth": {
-      "port": 9099,
-      "host": "0.0.0.0"
-    },
-    "firestore": {
-      "port": 8080,
-      "host": "0.0.0.0"
-    },
-    "hub": {
-      "port": 4400,
-      "host": "0.0.0.0"
-    },
-    "ui": {
-      "enabled": true,
-      "host": "0.0.0.0"
-    },
-    "logging": {
-      "host": "0.0.0.0"
-    },
-    "singleProjectMode": true
+  "hosting": {
+    "public": "out",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/dashboard.html"
+      }
+    ]
   }
 }

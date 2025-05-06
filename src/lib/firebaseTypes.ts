@@ -9,7 +9,8 @@ const timestampSchema = z.custom<Timestamp>((data) => data instanceof Object && 
 // User Entity
 export const UserSchema = z.object({
   id: z.string(),
-  username: z.string(),
+  username: z.string().optional(), // Made optional to accommodate initial Google/Guest sign-in
+  email: z.string().email().nullable().optional(), // Added email field, can be null for anonymous
   // password is not stored directly in Firestore, handled by Firebase Auth
   profilePreferences: z.object({
     displayName: z.string().optional(),
@@ -63,6 +64,6 @@ export type FriendRequest = z.infer<typeof FriendRequestSchema>;
 // Zod schema for updating user profile preferences
 export const ProfilePreferencesSchema = z.object({
   displayName: z.string().min(1, "Display name cannot be empty").optional(),
-  avatar: z.string().url("Invalid avatar URL").optional(),
+  avatar: z.string().url("Invalid avatar URL").optional().or(z.literal("")), // Allow empty string to clear
 });
 export type ProfilePreferences = z.infer<typeof ProfilePreferencesSchema>;
