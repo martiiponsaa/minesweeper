@@ -13,6 +13,7 @@
  import { Skeleton } from '@/components/ui/skeleton';
  import { Badge } from '@/components/ui/badge';
  import { formatDistanceToNow } from 'date-fns';
+ import { useToast } from '@/hooks/use-toast'; // Import useToast
 
 
  const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
@@ -72,13 +73,12 @@
         GameSchema,
         gameConstraints
     );
+    const { toast } = useToast(); // For the handleViewGame placeholder
 
     const handleViewGame = (gameId: string) => {
       // TODO: Implement a page or modal to view detailed game state/replay
       toast({ title: "Coming Soon", description: "Game replay functionality is not yet implemented."});
     };
-
-    const { toast } = useToast(); // For the handleViewGame placeholder
 
 
    return (
