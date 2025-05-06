@@ -61,14 +61,15 @@ export default function AuthForm() {
     router.push('/dashboard');
   };
 
-  const handleAuthError = (error: AuthError) => {
-    console.error("Authentication error:", error);
+  const handleAuthError = (error: AuthError, context?: string) => {
+    console.error(`Authentication error${context ? ` during ${context}` : ''}:`, error.code, error.message, error);
     let message = 'An unexpected error occurred. Please try again.';
     switch (error.code) {
       case 'auth/user-not-found':
       case 'auth/wrong-password':
+      case 'auth/invalid-credential': // Common for wrong password/email combination
         message = 'Invalid email or password.';
-        loginForm.setError("email", { type: "manual", message: " " }); // Clear specific field error message if general one is shown
+        loginForm.setError("email", { type: "manual", message: " " });
         loginForm.setError("password", { type: "manual", message: "Invalid email or password."});
         break;
       case 'auth/email-already-in-use':
@@ -91,6 +92,15 @@ export default function AuthForm() {
       case 'auth/too-many-requests':
           message = 'Too many attempts. Please try again later.';
           break;
+      case 'auth/network-request-failed':
+          message = 'Network error. Please check your internet connection and try again.';
+          break;
+      case 'auth/operation-not-allowed':
+          message = 'This sign-in method is not enabled. Please contact support.';
+          break;
+      case 'auth/unauthorized-domain':
+          message = 'This domain is not authorized for OAuth operations. Please check Firebase console.';
+          break;
       default:
         // Keep the generic message for other errors
         break;
@@ -108,7 +118,7 @@ export default function AuthForm() {
       await signInWithEmailAndPassword(auth, values.email, values.password);
       handleAuthSuccess('Login Successful');
     } catch (error) {
-      handleAuthError(error as AuthError);
+      handleAuthError(error as AuthError, 'email/password login');
     } finally {
       setIsLoading(false);
     }
@@ -138,7 +148,7 @@ export default function AuthForm() {
 
        handleAuthSuccess('Registration Successful');
      } catch (error) {
-       handleAuthError(error as AuthError);
+       handleAuthError(error as AuthError, 'email/password registration');
      } finally {
        setIsLoading(false);
      }
@@ -168,7 +178,7 @@ export default function AuthForm() {
 
       handleAuthSuccess('Signed in with Google');
     } catch (error) {
-      handleAuthError(error as AuthError);
+      handleAuthError(error as AuthError, 'Google Sign-In');
     } finally {
       setIsLoading(false);
     }
