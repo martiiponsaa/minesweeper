@@ -1,20 +1,21 @@
+
 'use client';
  import AppLayout from '@/components/layout/AppLayout';
  import { useAuth } from '@/hooks/useAuth';
  import { Button } from '@/components/ui/button';
  import { Input } from '@/components/ui/input';
- import { Label } from '@/components/ui/label'; 
+ import { Label } from '@/components/ui/label';
  import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
  import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
  import { Separator } from '@/components/ui/separator';
- import { UserPlus, Check, X, Users, Eye } from 'lucide-react'; 
+ import { UserPlus, Check, X, Users, Eye } from 'lucide-react';
  import { useState, useEffect } from 'react';
- import { useRouter } from 'next/navigation'; 
+ import { useRouter } from 'next/navigation';
  import { useFirestoreDocument } from '@/hooks/useFirestoreDocument';
  import { UserSchema, type User as UserType } from '@/lib/firebaseTypes';
  import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
  import { getFirebase } from '@/firebase';
- import { doc, updateDoc, arrayUnion, query, where, getDocs, collection, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore';
+ import { doc, updateDoc, arrayUnion, query, where, getDocs, collection, writeBatch, serverTimestamp, setDoc, limit } from 'firebase/firestore';
  import { useToast } from '@/hooks/use-toast';
  import { FriendRequestSchema, type FriendRequest } from '@/lib/firebaseTypes';
  import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -23,10 +24,10 @@
     const { user } = useAuth();
     const { firestore } = getFirebase();
     const { toast } = useToast();
-    const router = useRouter(); 
+    const router = useRouter();
 
     const [friendCodeToAdd, setFriendCodeToAdd] = useState('');
-    
+
     // Fetch current user's data to get their actual friend code and friends list
     const { data: currentUserData, loading: currentUserLoading } = useFirestoreDocument<UserType>(
       'users',
@@ -34,16 +35,36 @@
       UserSchema
     );
 
+    // Effect to generate and save userFriendCode if it's missing
+    useEffect(() => {
+        if (user && firestore && currentUserData && !currentUserLoading && !currentUserData.userFriendCode) {
+            console.log("Attempting to generate and save missing userFriendCode for user:", user.uid);
+            const userDocRef = doc(firestore, 'users', user.uid);
+            const newUserFriendCode = user.uid.substring(0, 10);
+
+            updateDoc(userDocRef, { userFriendCode: newUserFriendCode })
+                .then(() => {
+                    toast({ title: "Friend Code Generated", description: "Your friend code is now available." });
+                    // Data will auto-update due to onSnapshot in useFirestoreDocument
+                })
+                .catch((error) => {
+                    console.error("Error updating userFriendCode:", error);
+                    toast({ title: "Error", description: "Could not generate your friend code. Please try reloading.", variant: "destructive" });
+                });
+        }
+    }, [user, firestore, currentUserData, currentUserLoading, toast]);
+
+
     // Fetch profiles of users whose UIDs are in the current user's friendIds list
     const { data: friendsProfiles, loading: friendsProfilesLoading } = useFirestoreCollection<UserType>(
         'users',
         UserSchema,
-        currentUserData?.friendIds && currentUserData.friendIds.length > 0 
-            ? [where('id', 'in', currentUserData.friendIds)] 
+        currentUserData?.friendIds && currentUserData.friendIds.length > 0
+            ? [where('id', 'in', currentUserData.friendIds)]
             : [], // Empty constraints if no friendIds or they are not loaded yet
         !currentUserData?.friendIds || currentUserData.friendIds.length === 0 // Disable if no friend IDs
     );
-    
+
     // Fetch pending friend requests where the current user is the recipient
     const { data: incomingRequests, loading: incomingRequestsLoading, refetch: refetchIncomingRequests } = useFirestoreCollection<FriendRequest>(
         'friendRequests',
@@ -63,7 +84,7 @@
 
     const handleAddFriend = async () => {
         if (!user || !firestore || !currentUserData?.userFriendCode) {
-            toast({ title: "Error", description: "Cannot add friend. Ensure you are logged in.", variant: "destructive" });
+            toast({ title: "Error", description: "Cannot add friend. Ensure you are logged in and your friend code is available.", variant: "destructive" });
             return;
         }
         if (friendCodeToAdd === currentUserData.userFriendCode) {
@@ -71,32 +92,20 @@
             setFriendCodeToAdd('');
             return;
         }
-        if (currentUserData.friendIds?.some(friendId => {
-            // This check is a bit complex as friendCodeToAdd is not a UID directly.
-            // We'd need to query users collection to see if friendCodeToAdd matches any existing friend's userFriendCode.
-            // For simplicity, this direct check is an approximation. A more robust check happens server-side or before sending.
-            // Or, if friendCodes store the actual UIDs, then this check is more direct.
-            // Assuming friendCodeToAdd is the *friend's* code, we need to find that friend.
-            return false; // Placeholder: more robust check needed
-        })) {
-            toast({ title: "Already Friends", description: "You are already friends with this user.", variant: "info" });
-            setFriendCodeToAdd('');
-            return;
-        }
 
         try {
             // Check if a request already exists (either way)
-            const existingRequestQuery1 = query(collection(firestore, 'friendRequests'), 
-                where('requesterId', '==', user.uid), 
+            const existingRequestQuery1 = query(collection(firestore, 'friendRequests'),
+                where('requesterId', '==', user.uid),
                 where('recipientFriendCode', '==', friendCodeToAdd),
                 where('status', '==', 'pending')
             );
-            const existingRequestQuery2 = query(collection(firestore, 'friendRequests'), 
-                where('recipientId', '==', user.uid), 
+            const existingRequestQuery2 = query(collection(firestore, 'friendRequests'),
+                where('recipientId', '==', user.uid),
                 where('requesterFriendCode', '==', friendCodeToAdd),
                 where('status', '==', 'pending')
             );
-            
+
             const [snapshot1, snapshot2] = await Promise.all([getDocs(existingRequestQuery1), getDocs(existingRequestQuery2)]);
 
             if (!snapshot1.empty || !snapshot2.empty) {
@@ -133,12 +142,13 @@
 
             // Create new friend request
             const newRequestRef = doc(collection(firestore, 'friendRequests'));
-            const newRequest: Omit<FriendRequest, 'id'> = {
+            const newRequest: Omit<FriendRequest, 'id'> = { // Firestore will auto-generate ID
                 requesterId: user.uid,
                 recipientId: recipientUserData.id,
                 status: 'pending',
                 requesterFriendCode: currentUserData.userFriendCode,
                 recipientFriendCode: recipientUserData.userFriendCode,
+                // No need to set 'id' here explicitly when using doc(collection(...))
             };
             await setDoc(newRequestRef, newRequest);
 
@@ -150,12 +160,12 @@
             toast({ title: "Error", description: "Could not send friend request.", variant: "destructive" });
         }
     };
-    
+
     const handleFriendRequest = async (request: FriendRequest, action: 'accept' | 'reject') => {
         if (!user || !firestore) return;
-        
+
         const requestDocRef = doc(firestore, 'friendRequests', request.id);
-        
+
         try {
             if (action === 'accept') {
                 const batch = writeBatch(firestore);
@@ -165,10 +175,10 @@
                 // Add to both users' friend lists
                 const currentUserDocRef = doc(firestore, 'users', user.uid);
                 const requesterUserDocRef = doc(firestore, 'users', request.requesterId);
-                
+
                 batch.update(currentUserDocRef, { friendIds: arrayUnion(request.requesterId) });
                 batch.update(requesterUserDocRef, { friendIds: arrayUnion(user.uid) });
-                
+
                 await batch.commit();
                 toast({ title: "Friend Added", description: "You are now friends!" });
             } else { // reject
@@ -191,7 +201,7 @@
 
    return (
      <AppLayout>
-       {!user ? ( 
+       {!user ? (
          <div className="container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
            <Users className="h-16 w-16 text-muted-foreground mb-4" />
            <h1 className="text-2xl font-bold text-foreground mb-3">Manage Your Friends</h1>
@@ -261,12 +271,12 @@
                        <CardContent className="space-y-4">
                           <div>
                               <Label htmlFor="myFriendCode" className="mb-2 block">Your Friend Code:</Label>
-                               <Input 
+                               <Input
                                   id="myFriendCode"
-                                  type="text" 
-                                  value={currentUserLoading ? "Loading..." : (currentUserData?.userFriendCode || "N/A - Please re-login if this persists")} 
-                                  readOnly 
-                                  className="bg-muted cursor-pointer" 
+                                  type="text"
+                                  value={currentUserLoading ? "Loading..." : (!currentUserData?.userFriendCode ? "Generating..." : currentUserData.userFriendCode)}
+                                  readOnly
+                                  className="bg-muted cursor-pointer"
                                   onClick={() => {
                                     if (currentUserData?.userFriendCode) {
                                         navigator.clipboard.writeText(currentUserData.userFriendCode);
