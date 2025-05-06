@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signInAnonymously, AuthError, updateProfile } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, AuthError, updateProfile, signInAnonymously } from 'firebase/auth';
 import { getFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -155,10 +155,10 @@ export default function AuthForm() {
       const userDocRef = doc(firestore, 'users', user.uid);
       await setDoc(userDocRef, {
         id: user.uid,
-        username: user.displayName || user.email?.split('@')[0] || 'google_user', // Use display name, or part of email, or a default
+        username: user.displayName || user.email?.split('@')[0] || `user_${user.uid.substring(0,5)}`, // Use display name, or part of email, or a default
         email: user.email,
         profilePreferences: {
-          displayName: user.displayName || '',
+          displayName: user.displayName || user.email?.split('@')[0] || `User ${user.uid.substring(0,5)}`,
           avatar: user.photoURL || '',
         },
         // Ensure these fields exist, even if empty, to match UserSchema
@@ -176,30 +176,12 @@ export default function AuthForm() {
 
    const handleAnonymousSignIn = async () => {
       setIsLoading(true);
-      try {
-        const userCredential = await signInAnonymously(auth);
-        const user = userCredential.user;
-
-         // Save initial anonymous user data to Firestore
-        const userDocRef = doc(firestore, 'users', user.uid);
-        await setDoc(userDocRef, {
-            id: user.uid,
-            username: `Guest_${user.uid.substring(0,5)}`, // Create a guest username
-            email: null, // Anonymous users don't have emails
-            profilePreferences: {
-                displayName: `Guest`,
-                avatar: '',
-            },
-            friendCodes: [],
-            friendIds: [],
-        }, { merge: true });
-        
-        handleAuthSuccess('Signed in as Guest');
-      } catch (error) {
-        handleAuthError(error as AuthError);
-      } finally {
-        setIsLoading(false);
-      }
+      // No Firebase sign-in for guest mode, directly navigate
+      // No Firestore data creation for guest
+      router.push('/dashboard'); 
+      // We don't call handleAuthSuccess as there's no actual "auth" event
+      toast({ title: "Entering as Guest", description: "Your progress will not be saved." });
+      setIsLoading(false);
     };
 
 

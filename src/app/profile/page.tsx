@@ -20,7 +20,7 @@
   import { zodErrorHandler } from '@/lib/zodErrorHandler';
   import { Skeleton } from '@/components/ui/skeleton';
   import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-  import { AlertCircle, CheckCircle } from "lucide-react"
+  import { AlertCircle, CheckCircle, Settings } from "lucide-react" // Added Settings icon
   import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar" // Import Avatar components
  import {
    AlertDialog,
@@ -90,7 +90,7 @@ import { FormDescription } from '@/components/ui/form';
      // Effect to reset form when userData or user changes
      useEffect(() => {
        // Prioritize userData if available and not loading
-       if (userData?.profilePreferences && !userLoading) {
+       if (user && userData?.profilePreferences && !userLoading) {
          profileForm.reset({
            displayName: userData.profilePreferences.displayName || user?.displayName || '',
            avatar: userData.profilePreferences.avatar || user?.photoURL || '',
@@ -100,7 +100,7 @@ import { FormDescription } from '@/components/ui/form';
            displayName: user.displayName || '',
            avatar: user.photoURL || '',
          });
-       } else if (!user && !authLoading) { // Reset if user logs out
+       } else if (!user && !authLoading) { // Reset if user logs out or is guest
           profileForm.reset({ displayName: '', avatar: '' });
        }
      }, [userData, user, authLoading, userLoading, profileForm]);
@@ -210,47 +210,50 @@ import { FormDescription } from '@/components/ui/form';
       return '?';
     };
 
-    // // Handle case where user is not logged in - Removed as AppLayout handles this
-    // if (!authLoading && !user) {
-    //   return (
-    //      <AppLayout>
-    //          <div className="container mx-auto p-4 md:p-8">
-    //            <h1 className="text-3xl font-bold text-foreground mb-8">Profile & Settings</h1>
-    //             <Alert variant="default" className="bg-card">
-    //                <AlertCircle className="h-4 w-4" />
-    //                <AlertTitle>Not Logged In</AlertTitle>
-    //                <AlertDescription>
-    //                  Please <Button variant="link" className="p-0 h-auto" onClick={() => router.push('/login')}>login</Button> to view and edit your profile.
-    //                </AlertDescription>
-    //              </Alert>
-    //          </div>
-    //       </AppLayout>
-    //    )
-    //  }
-
-
    return (
      <AppLayout>
        <div className="container mx-auto p-4 md:p-8">
-         <h1 className="text-3xl font-bold text-foreground mb-8">Profile & Settings</h1>
-
-          {/* Show skeleton only when auth OR firestore data is loading */}
-          {(authLoading || userLoading) ? (
+         
+          {authLoading ? (
              <div className="space-y-6">
-                <Skeleton className="h-10 w-1/3" />
+                <Skeleton className="h-10 w-1/3 mb-8" />
                 <Skeleton className="h-64 w-full rounded-lg" />
                 <Skeleton className="h-64 w-full rounded-lg" />
              </div>
-           ) : userError ? ( // Show error if Firestore loading failed
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error Loading Profile</AlertTitle>
-                <AlertDescription>
-                  There was an issue loading your profile data. Please try again later.
-                </AlertDescription>
-              </Alert>
-           ) : ( // Render content if not loading and no error
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+           ) : !user ? ( // User is a GUEST (not logged in)
+             <div className="flex flex-col items-center justify-center text-center">
+               <Settings className="h-16 w-16 text-muted-foreground mb-4" />
+               <h1 className="text-2xl font-bold text-foreground mb-3">Profile & Settings</h1>
+               <p className="text-muted-foreground mb-6 max-w-md">
+                 To manage your profile preferences, display name, avatar, and password, please create an account or log in. Guests cannot access these settings.
+               </p>
+               <Button onClick={() => router.push('/register')}>
+                 Register or Login
+               </Button>
+             </div>
+           ) : userError && !userLoading ? ( // Show error if Firestore loading failed for a LOGGED IN user
+              <>
+                <h1 className="text-3xl font-bold text-foreground mb-8">Profile & Settings</h1>
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Error Loading Profile</AlertTitle>
+                  <AlertDescription>
+                    There was an issue loading your profile data. Please try again later.
+                  </AlertDescription>
+                </Alert>
+              </>
+           ) : userLoading && user ? ( // Still loading Firestore data for a LOGGED IN user
+              <>
+                <h1 className="text-3xl font-bold text-foreground mb-8">Profile & Settings</h1>
+                <div className="space-y-6">
+                    <Skeleton className="h-64 w-full rounded-lg" />
+                    <Skeleton className="h-64 w-full rounded-lg" />
+                </div>
+              </>
+           ) : ( // Render content if user is logged in, not loading and no error
+           <>
+            <h1 className="text-3xl font-bold text-foreground mb-8">Profile & Settings</h1>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Profile Preferences Card */}
              <Card>
                <CardHeader>
@@ -365,7 +368,8 @@ import { FormDescription } from '@/components/ui/form';
                  </form>
                </Form>
              </Card>
-           </div>
+            </div>
+           </>
            )}
        </div>
      </AppLayout>

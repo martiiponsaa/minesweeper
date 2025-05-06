@@ -17,7 +17,7 @@ import {
   SidebarGroupLabel,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Home, History, Users, Settings, LogOut, HelpCircle, BarChart3, LogIn } from 'lucide-react'; // Added LogIn
+import { Home, History, Users, Settings, LogOut, HelpCircle, BarChart3, LogIn, UserPlus } from 'lucide-react'; // Added LogIn, UserPlus
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
@@ -52,7 +52,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
       if (user?.email) {
         return user.email.charAt(0).toUpperCase();
       }
-      return '?';
+      return 'G'; // Guest fallback
     };
 
   return (
@@ -82,7 +82,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
              <SidebarMenuItem>
                <SidebarMenuButton asChild isActive={pathname === '/play'} tooltip="Play">
                  <Link href="/play"> {/* Link to the game page */}
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18.5 3.5a2.12 2.12 0 0 1 3 3L7.4 21.4a2.12 2.12 0 0 1-3-3L18.5 3.5z"></path><path d="m12 2-1.9 1.9c-1.5 1.5-1.5 4 0 5.5l4.4 4.4c1.5 1.5 4 1.5 5.5 0L22 12"></path><path d="m2 12 1.9 1.9c1.5 1.5 4 1.5 5.5 0l4.4-4.4c1.5-1.5 1.5-4 0-5.5L12 2"></path><path d="M10.6 10.6 7.4 7.4"></path></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18.5 3.5a2.12 2.12 0 0 1 3 3L7.4 21.4a2.12 0 0 1-3-3L18.5 3.5z"></path><path d="m12 2-1.9 1.9c-1.5 1.5-1.5 4 0 5.5l4.4 4.4c1.5 1.5 4 1.5 5.5 0L22 12"></path><path d="m2 12 1.9 1.9c1.5 1.5 4 1.5 5.5 0l4.4-4.4c1.5-1.5 1.5-4 0-5.5L12 2"></path><path d="M10.6 10.6 7.4 7.4"></path></svg>
                   <span>Play</span>
                  </Link>
                </SidebarMenuButton>
@@ -133,7 +133,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                    <span>Logout</span>
                  </SidebarMenuButton>
                </SidebarMenuItem>
-             ) : ( // Show Login if user is not logged in
+             ) : ( // Show Login if user is not logged in (guest mode)
                <SidebarMenuItem>
                  <SidebarMenuButton onClick={() => router.push('/login')} tooltip="Login">
                    <LogIn />
@@ -152,7 +152,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
              {/* Mobile Sidebar Trigger */}
              <SidebarTrigger className="sm:hidden"/>
 
-             {/* User Menu or Login Button */}
+             {/* User Menu or Login/Register Button */}
              <div className="ml-auto flex items-center gap-4">
                  {user ? ( // If user is logged in, show dropdown
                     <DropdownMenu>
@@ -171,7 +171,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                                         {user.displayName || 'User'}
                                     </p>
                                     <p className="text-xs leading-none text-muted-foreground">
-                                        {user.email || 'Guest'}
+                                        {user.email || 'Authenticated User'}
                                     </p>
                                 </div>
                             </DropdownMenuLabel>
@@ -187,10 +187,10 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                 ) : ( // If user is not logged in, show Login button
-                   <Button variant="outline" onClick={() => router.push('/login')}>
-                     <LogIn className="mr-2 h-4 w-4" />
-                     Login
+                 ) : ( // If user is not logged in (guest mode), show Register button
+                   <Button variant="outline" onClick={() => router.push('/register')}>
+                     <UserPlus className="mr-2 h-4 w-4" />
+                     Register
                    </Button>
                  )}
              </div>
