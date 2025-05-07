@@ -17,6 +17,7 @@ import { useFirestoreDocument } from '@/hooks/useFirestoreDocument';
 import { UserSchema, type User as UserType, ProfilePreferencesSchema, type ProfilePreferences } from '@/lib/firebaseTypes';
 import { getFirebase } from '@/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import { updateProfile as updateAuthProfile } from 'firebase/auth'; // Import for updating auth profile
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter } from 'next/navigation';
@@ -28,7 +29,7 @@ type UserProfileFormValues = z.infer<typeof UserProfileFormSchema>;
 
 export default function ProfilePage() {
   const { user, loading: authLoading } = useAuth();
-  const { firestore } = getFirebase();
+  const { firestore, auth } = getFirebase(); // Added auth
   const { toast } = useToast();
   const router = useRouter();
 
@@ -65,7 +66,7 @@ export default function ProfilePage() {
   }, [userData, form]);
 
   const onSubmit = async (values: UserProfileFormValues) => {
-    if (!user || !firestore) {
+    if (!user || !firestore || !auth.currentUser) { // Ensure auth.currentUser exists
       toast({ title: 'Error', description: 'You must be logged in to update your profile.', variant: 'destructive' });
       return;
     }
@@ -79,8 +80,16 @@ export default function ProfilePage() {
       await updateDoc(userDocRef, {
         profilePreferences: dataToUpdate,
         // Conditionally update username if it's meant to be synced with displayName
+        // Also update the displayName in Firebase Auth
         ...(userData?.username !== values.displayName && { username: values.displayName }),
       });
+
+      // Update Firebase Auth profile
+      await updateAuthProfile(auth.currentUser, {
+        displayName: values.displayName,
+        photoURL: values.avatar || '',
+      });
+      
       toast({ title: 'Profile Updated', description: 'Your preferences have been saved.' });
       setCurrentAvatarPreview(dataToUpdate.avatar || undefined);
     } catch (error) {
