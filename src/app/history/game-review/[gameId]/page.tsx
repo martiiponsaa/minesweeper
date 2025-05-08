@@ -1,28 +1,16 @@
 // src/app/history/game-review/[gameId]/page.tsx
 // NO 'use client' here
+import React from 'react';
 
 import GameReviewClient from '@/components/history/GameReviewClient';
-import { getAllGameIds } from '@/lib/firestoreUtils';
-import { getFirebase } from '@/firebase';
+// Firebase related imports for generateStaticParams (if used) are removed or handled server-side.
 
-// generateStaticParams is required for dynamic routes when using `output: 'export'`.
-// Returning an empty array means no specific game paths are pre-rendered at build time.
-// Pages will be generated on-demand or when linked from other pre-rendered pages.
-export async function generateStaticParams() {
-  const { firestore } = getFirebase();
-  if (!firestore) {
-    console.error('Firestore is not available.');
-    return [];
-  }
-  try {
-    const gameIds = await getAllGameIds(firestore);
-    return gameIds.map((id) => ({ gameId: id }));
-  } catch (error) {
-    console.error('Error fetching game IDs:', error);
-    return [];
-  }
-}
+// generateStaticParams is removed to rely on server-side rendering for dynamic routes.
+// If pre-rendering specific paths is needed later, ensure generateStaticParams
+// does not call client-side Firebase initialization (like getFirebase()) directly.
+// For now, dynamic paths will be rendered on demand by the Firebase Function.
 
-export default function GameReviewPage({ params }: { params: { gameId: string } }) {
-  return <GameReviewClient gameId={params.gameId} />;
-}
+const GameReviewPage: React.FC<{ params: { gameId: string } }> = ({ params }) => {
+    return <GameReviewClient gameId={params.gameId} />;
+};
+export default GameReviewPage;

@@ -40,7 +40,7 @@
     "firebase": "^11.6.1-firebase-studio-sdk-integration.9de25069c",
     "genkit": "^1.6.2",
     "lucide-react": "^0.475.0",
-    "next": "^15.2.3",
+    "next": "^15.3.2",
     "patch-package": "^8.0.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
@@ -53,8 +53,8 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^18",
+    "@types/node": "^20.17.45",
+    "@types/react": "^18.3.21",
     "@types/react-dom": "^18",
     "genkit-cli": "^1.6.1",
     "postcss": "^8",

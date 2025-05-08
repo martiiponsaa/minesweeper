@@ -15,7 +15,7 @@ service cloud.firestore {
       // Allow users to create their profile if authenticated.
       allow create: if request.auth != null && request.auth.uid == userId;
 
-      // Allow users to update their own profile data.
+      // Allow users to update their own profile data without restriction.
       allow update: if request.auth != null && request.auth.uid == userId;
 
       // Allow users to delete their own profile data.
