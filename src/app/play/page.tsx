@@ -264,7 +264,7 @@ export default function PlayPage() {
         return;
     }
     if (gameResolvedRef.current) { 
-        if (!isAutoSave) toast({ title: "Game Ended", description: "Cannot save a game that has already finished.", variant: "info" });
+        if (!isAutoSave) toast({ title: "Game Ended", description: "Cannot save a game that has already finished.", variant: "destructive" });
         return;
     }
 
@@ -436,12 +436,11 @@ export default function PlayPage() {
                     setShowBoard(false); 
                     setGameResolved(true); 
                     setGameData(null); 
-                }} 
-                disabled={isSavingOrStarting || (showBoard && !!activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name)}
-                title={ (showBoard && !!activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name) ? "Game in progress. To change difficulty, first Quit or Restart, then select new difficulty and Start Game." : "Select difficulty"}
+                }}                disabled={isSavingOrStarting || (showBoard && !!(activeGameIdRef.current ?? false) && !(gameResolvedRef.current ?? true) && !!(user ?? false) && (gameData?.difficulty ?? null) === DIFFICULTY_LEVELS[selectedDifficultyKey].name)}
               >
-                <SelectTrigger id="difficulty-select" className="w-full">
+                <SelectTrigger id="difficulty-select" className="w-full" title={(showBoard && !!(activeGameIdRef.current ?? false) && !(gameResolvedRef.current ?? true) && !!(user ?? false) && (gameData?.difficulty ?? null) === DIFFICULTY_LEVELS[selectedDifficultyKey].name) ? "Game in progress. To change difficulty, first Quit or Restart, then select new difficulty and Start Game." : "Select difficulty"}>
                   <SelectValue placeholder="Select difficulty" />
+
                 </SelectTrigger>
                 <SelectContent>
                   {Object.keys(DIFFICULTY_LEVELS).map(key => (
@@ -455,7 +454,7 @@ export default function PlayPage() {
             <Button 
                 onClick={handleStartGame} 
                 className="w-full sm:w-auto mt-4 sm:mt-6 bg-primary hover:bg-primary/90" 
-                disabled={isSavingOrStarting || (showBoard && activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name)}
+                disabled={isSavingOrStarting || (showBoard && !!(activeGameIdRef.current ?? false) && !(gameResolvedRef.current ?? true) && !!(user ?? false) && (gameData?.difficulty ?? null) === DIFFICULTY_LEVELS[selectedDifficultyKey].name)}
                 title={
                     (showBoard && activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name)
                     ? "Game already in progress with this difficulty. Choose 'Restart' or 'Quit'." 

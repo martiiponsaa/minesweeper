@@ -110,7 +110,7 @@
             const [snapshot1, snapshot2] = await Promise.all([getDocs(existingRequestQuery1), getDocs(existingRequestQuery2)]);
 
             if (!snapshot1.empty || !snapshot2.empty) {
-                toast({ title: "Request Pending", description: "A friend request already exists with this user.", variant: "info" });
+                toast({ title: "Request Pending", description: "A friend request already exists with this user.", variant: "default" });
                 setFriendCodeToAdd('');
                 return;
             }
@@ -135,8 +135,8 @@
             }
              // Check if already friends
             if (currentUserData.friendIds?.includes(recipientUserData.id)) {
-                toast({ title: "Already Friends", description: "You are already friends with this user.", variant: "info" });
-                setFriendCodeToAdd('');
+                toast({ title: "Already Friends", description: "You are already friends with this user.", variant: "default" });
+                setFriendCodeToAdd('')
                 return;
             }
 
@@ -193,7 +193,7 @@
         }
     };
 
-    const getInitials = (name?: string, email?: string) => {
+    const getInitials = (name?: string | null, email?: string | null) => {
       if (name) return name.charAt(0).toUpperCase();
       if (email) return email.charAt(0).toUpperCase();
       return '?';
