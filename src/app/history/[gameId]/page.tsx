@@ -16,13 +16,12 @@ import { ArrowLeft, AlertCircle, CheckCircle2, XCircle, Hourglass, PauseCircle, 
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
-// generateStaticParams is not needed here because:
-// 1. The page is marked with 'use client', indicating primarily client-side rendering.
-// 2. `output: 'export'` is being removed from next.config.js, allowing dynamic routes to be handled by Next.js without pre-rendering all possible paths.
-// If `output: 'export'` were to be kept, this function would be necessary for static generation of dynamic paths.
-// export async function generateStaticParams() {
-//   return []; // Example: no paths pre-rendered, rely on fallback or client-side rendering.
-// }
+// generateStaticParams is required for dynamic routes when using `output: 'export'`.
+// Returning an empty array means no specific game paths are pre-rendered at build time.
+// The client will handle fetching and rendering for the specific [gameId].
+export async function generateStaticParams() {
+  return []; 
+}
 
 const GameResultIcon = ({ result }: { result: Game['result'] }) => {
   switch (result) {
