@@ -57,7 +57,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
   const [difficulty, setDifficulty] = useState<DifficultySetting>(DIFFICULTY_LEVELS[difficultyKey]);
   
   const [board, setBoard] = useState<BoardState>(() => {
-    if (initialBoardState) {
+    if (initialBoardState && !["INITIAL_BOARD_STATE", "QUIT_FOR_NEW_GAME", "QUIT_ON_RESTART", "QUIT_ON_DIFFICULTY_CHANGE", "QUIT_STATE_UNKNOWN", "AUTO_QUIT_MULTIPLE_IN_PROGRESS"].includes(initialBoardState)) {
       try {
         const parsedBoard = JSON.parse(initialBoardState) as BoardState;
         if (Array.isArray(parsedBoard) && parsedBoard.length > 0 && Array.isArray(parsedBoard[0])) {
@@ -79,7 +79,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
       return getRemainingMines(board, currentDifficultySettings.mines);
   });
   const [timeElapsed, setTimeElapsed] = useState<number>(initialTimeElapsed);
-  const [firstClick, setFirstClick] = useState<boolean>(!initialBoardState);
+  const [firstClick, setFirstClick] = useState<boolean>(!initialBoardState || ["INITIAL_BOARD_STATE", "QUIT_FOR_NEW_GAME", "QUIT_ON_RESTART", "QUIT_ON_DIFFICULTY_CHANGE", "QUIT_STATE_UNKNOWN", "AUTO_QUIT_MULTIPLE_IN_PROGRESS"].includes(initialBoardState));
   const [revealedCellsCount, setRevealedCellsCount] = useState<number>(() => {
     let count = 0;
     board.forEach(row => row.forEach(cell => {
@@ -111,7 +111,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     const newDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
     setDifficulty(newDifficultySettings);
 
-    if (initialBoardState) {
+    if (initialBoardState && !["INITIAL_BOARD_STATE", "QUIT_FOR_NEW_GAME", "QUIT_ON_RESTART", "QUIT_ON_DIFFICULTY_CHANGE", "QUIT_STATE_UNKNOWN", "AUTO_QUIT_MULTIPLE_IN_PROGRESS"].includes(initialBoardState)) {
         try {
             const parsedBoardInput = JSON.parse(initialBoardState) as BoardState;
             if (Array.isArray(parsedBoardInput) && 
@@ -294,7 +294,16 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogAction onClick={() => resetGameInternals(difficultyKey, true)}>Play Again</AlertDialogAction>
+            <Button variant="outline" onClick={() => setShowDialog(false)}>
+              Close
+            </Button>
+            <AlertDialogAction onClick={() => {
+              // AlertDialogAction implicitly closes the dialog.
+              // Then reset the game. resetGameInternals will also attempt to close dialog (harmless).
+              resetGameInternals(difficultyKey);
+            }}>
+              Play Again
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
