@@ -15,10 +15,11 @@ import {
 } from '@/lib/minesweeper';
 import { DIFFICULTY_LEVELS, type DifficultyKey, type DifficultySetting } from '@/config/minesweeperSettings';
 import { Button } from '@/components/ui/button';
-import { Smile, Frown, PartyPopper, Timer, Flag as FlagIcon } from 'lucide-react';
+import { Smile, Frown, PartyPopper, Timer, Flag as FlagIcon, Eye } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -37,6 +38,7 @@ interface GameBoardProps {
   isGuest: boolean;
   initialBoardState?: string; 
   initialTimeElapsed?: number; 
+  reviewMode?: boolean; // New prop for review mode
 }
 
 export interface GameBoardRef {
@@ -46,18 +48,28 @@ export interface GameBoardRef {
   calculateTimeFromStart: (startTime: Timestamp) => number;
 }
 
+const nonJsonGameStates = [
+  "INITIAL_BOARD_STATE",
+  "QUIT_FOR_NEW_GAME",
+  "QUIT_ON_RESTART",
+  "QUIT_ON_DIFFICULTY_CHANGE",
+  "QUIT_STATE_UNKNOWN",
+  "AUTO_QUIT_MULTIPLE_IN_PROGRESS",
+];
+
 
 const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ 
   difficultyKey, 
   onGameEnd, 
   isGuest,
   initialBoardState,
-  initialTimeElapsed = 0 
+  initialTimeElapsed = 0,
+  reviewMode = false // Default reviewMode to false
 }, ref) => {
   const [difficulty, setDifficulty] = useState<DifficultySetting>(DIFFICULTY_LEVELS[difficultyKey]);
   
   const [board, setBoard] = useState<BoardState>(() => {
-    if (initialBoardState && !["INITIAL_BOARD_STATE", "QUIT_FOR_NEW_GAME", "QUIT_ON_RESTART", "QUIT_ON_DIFFICULTY_CHANGE", "QUIT_STATE_UNKNOWN", "AUTO_QUIT_MULTIPLE_IN_PROGRESS"].includes(initialBoardState)) {
+    if (initialBoardState && !nonJsonGameStates.includes(initialBoardState)) {
       try {
         const parsedBoard = JSON.parse(initialBoardState) as BoardState;
         if (Array.isArray(parsedBoard) && parsedBoard.length > 0 && Array.isArray(parsedBoard[0])) {
@@ -73,13 +85,23 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     return createInitialBoard(DIFFICULTY_LEVELS[difficultyKey].rows, DIFFICULTY_LEVELS[difficultyKey].cols);
   });
 
-  const [gameStatus, setGameStatus] = useState<GameStatus>(initialBoardState ? 'playing' : 'ready');
+  const [gameStatus, setGameStatus] = useState<GameStatus>(() => {
+    if (reviewMode) return 'playing'; // For review, assume playing to show board
+    return initialBoardState ? 'playing' : 'ready';
+  });
   const [minesRemaining, setMinesRemaining] = useState<number>(() => {
       const currentDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
+      // In review mode, calculate based on actual mines in loaded state if possible, else default
+      if (reviewMode && initialBoardState && !nonJsonGameStates.includes(initialBoardState)) {
+        try {
+          const parsedBoard = JSON.parse(initialBoardState) as BoardState;
+          return getRemainingMines(parsedBoard, currentDifficultySettings.mines);
+        } catch (e) { /* fallback to default */ }
+      }
       return getRemainingMines(board, currentDifficultySettings.mines);
   });
   const [timeElapsed, setTimeElapsed] = useState<number>(initialTimeElapsed);
-  const [firstClick, setFirstClick] = useState<boolean>(!initialBoardState || ["INITIAL_BOARD_STATE", "QUIT_FOR_NEW_GAME", "QUIT_ON_RESTART", "QUIT_ON_DIFFICULTY_CHANGE", "QUIT_STATE_UNKNOWN", "AUTO_QUIT_MULTIPLE_IN_PROGRESS"].includes(initialBoardState));
+  const [firstClick, setFirstClick] = useState<boolean>(reviewMode ? false : (!initialBoardState || nonJsonGameStates.includes(initialBoardState ?? "")));
   const [revealedCellsCount, setRevealedCellsCount] = useState<number>(() => {
     let count = 0;
     board.forEach(row => row.forEach(cell => {
@@ -90,28 +112,31 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
   const [showDialog, setShowDialog] = useState<boolean>(false);
   const [dialogMessage, setDialogMessage] = useState<{title: string, description: string, icon?: React.ReactNode}>({title: '', description: '', icon: undefined});
+  const [isGameResolvedByLoad, setIsGameResolvedByLoad] = useState(false);
 
 
   const resetGameInternals = useCallback((newDifficultyKey: DifficultyKey, keepDialog = false) => {
+    if (reviewMode) return; // No reset in review mode
     const newDifficultySettings = DIFFICULTY_LEVELS[newDifficultyKey];
     setDifficulty(newDifficultySettings);
     setBoard(createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols));
     setGameStatus('ready');
     setMinesRemaining(newDifficultySettings.mines);
-    setTimeElapsed(0); // Reset time on internal reset
+    setTimeElapsed(0); 
     setFirstClick(true);
     setRevealedCellsCount(0);
+    setIsGameResolvedByLoad(false);
     if (!keepDialog) {
       setShowDialog(false);
     }
-  }, []);
+  }, [reviewMode]);
 
 
   useEffect(() => {
     const newDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
     setDifficulty(newDifficultySettings);
 
-    if (initialBoardState && !["INITIAL_BOARD_STATE", "QUIT_FOR_NEW_GAME", "QUIT_ON_RESTART", "QUIT_ON_DIFFICULTY_CHANGE", "QUIT_STATE_UNKNOWN", "AUTO_QUIT_MULTIPLE_IN_PROGRESS"].includes(initialBoardState)) {
+    if (initialBoardState && !nonJsonGameStates.includes(initialBoardState)) {
         try {
             const parsedBoardInput = JSON.parse(initialBoardState) as BoardState;
             if (Array.isArray(parsedBoardInput) && 
@@ -122,27 +147,39 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
                 const boardWithCalculatedMines = calculateAdjacentMines(parsedBoardInput, newDifficultySettings.rows, newDifficultySettings.cols);
                 setBoard(boardWithCalculatedMines);
                 setMinesRemaining(getRemainingMines(boardWithCalculatedMines, newDifficultySettings.mines));
-                setGameStatus('playing'); 
+                
+                let gameLost = false;
+                let gameWon = false;
+                let revealedCount = 0;
+                boardWithCalculatedMines.forEach(row => row.forEach(cell => {
+                    if(cell.isRevealed && cell.isMine) gameLost = true;
+                    if(cell.isRevealed && !cell.isMine) revealedCount++;
+                }));
+
+                if (checkWinCondition(boardWithCalculatedMines, newDifficultySettings.rows, newDifficultySettings.cols, newDifficultySettings.mines)) {
+                    gameWon = true;
+                }
+
+                if (gameLost) setGameStatus('lost');
+                else if (gameWon) setGameStatus('won');
+                else setGameStatus('playing');
+                
                 setFirstClick(false); 
                 setTimeElapsed(initialTimeElapsed || 0);
-
-                let revealed = 0;
-                boardWithCalculatedMines.forEach(row => row.forEach(cell => {
-                    if (cell.isRevealed && !cell.isMine) revealed++;
-                }));
-                setRevealedCellsCount(revealed);
+                setRevealedCellsCount(revealedCount);
+                setIsGameResolvedByLoad(gameWon || gameLost);
             } else {
-                 resetGameInternals(difficultyKey);
+                 if (!reviewMode) resetGameInternals(difficultyKey);
             }
         } catch (e) {
             console.error("Error processing initialBoardState on difficulty/prop change:", e);
-            resetGameInternals(difficultyKey);
+            if (!reviewMode) resetGameInternals(difficultyKey);
         }
     } else {
-        resetGameInternals(difficultyKey);
+        if (!reviewMode) resetGameInternals(difficultyKey);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [difficultyKey, initialBoardState]); 
+  }, [difficultyKey, initialBoardState, reviewMode]); // Added reviewMode dependency
 
   useEffect(() => {
     setTimeElapsed(initialTimeElapsed);
@@ -150,16 +187,16 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
   useEffect(() => {
     let timerId: NodeJS.Timeout | undefined;
-    if (gameStatus === 'playing') {
+    if (gameStatus === 'playing' && !reviewMode && !isGameResolvedByLoad) { // Timer only runs if not in reviewMode and game is active
       timerId = setInterval(() => {
         setTimeElapsed((prevTime) => prevTime + 1);
       }, 1000);
     }
     return () => clearInterval(timerId);
-  }, [gameStatus]);
+  }, [gameStatus, reviewMode, isGameResolvedByLoad]);
 
   const handleCellClick = (x: number, y: number) => {
-    if (gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isFlagged) {
+    if (reviewMode || gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isFlagged) {
       return;
     }
 
@@ -181,22 +218,26 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
     if (gameOver) {
       setGameStatus('lost');
-      setDialogMessage({ title: 'Game Over!', description: 'You hit a mine. Better luck next time!', icon: <Frown className="h-6 w-6 text-red-500" /> });
-      setShowDialog(true);
-      onGameEnd?.('lost', timeElapsed, JSON.stringify(newBoard));
+      if (!reviewMode) {
+        setDialogMessage({ title: 'Game Over!', description: 'You hit a mine. Better luck next time!', icon: <Frown className="h-6 w-6 text-red-500" /> });
+        setShowDialog(true);
+        onGameEnd?.('lost', timeElapsed, JSON.stringify(newBoard));
+      }
     } else {
       if (checkWinCondition(newBoard, difficulty.rows, difficulty.cols, difficulty.mines)) {
         setGameStatus('won');
-        setDialogMessage({ title: 'Congratulations!', description: 'You cleared the board!', icon: <PartyPopper className="h-6 w-6 text-yellow-500" /> });
-        setShowDialog(true);
-        onGameEnd?.('won', timeElapsed, JSON.stringify(newBoard));
+        if(!reviewMode){
+          setDialogMessage({ title: 'Congratulations!', description: 'You cleared the board!', icon: <PartyPopper className="h-6 w-6 text-yellow-500" /> });
+          setShowDialog(true);
+          onGameEnd?.('won', timeElapsed, JSON.stringify(newBoard));
+        }
       }
     }
   };
 
   const handleCellContextMenu = (e: React.MouseEvent, x: number, y: number) => {
     e.preventDefault();
-    if (gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isRevealed) {
+    if (reviewMode || gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isRevealed) {
       return;
     }
     
@@ -216,6 +257,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
 
   const getGameStatusIcon = () => {
+    if (reviewMode) return <Eye className="h-8 w-8 text-foreground" />;
     if (gameStatus === 'won') return <PartyPopper className="h-8 w-8 text-yellow-500" />;
     if (gameStatus === 'lost') return <Frown className="h-8 w-8 text-red-500" />;
     return <Smile className="h-8 w-8 text-foreground" />;
@@ -237,10 +279,10 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     getCurrentTimeElapsed: () => timeElapsed,
     resetBoardToInitial: () => { 
         resetGameInternals(difficultyKey);
-        setTimeElapsed(0); // Ensure timer is reset on explicit board reset
+        setTimeElapsed(0);
     },
     calculateTimeFromStart: (startTime: Timestamp) => {
-        const now = Math.floor(Date.now() / 1000); // Current time in seconds
+        const now = Math.floor(Date.now() / 1000); 
         const startSeconds = startTime.seconds;
         return Math.max(0, now - startSeconds);
     }
@@ -254,7 +296,14 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
           <FlagIcon className="mr-2 h-5 w-5 text-red-500" />
           <span className="text-foreground">{String(minesRemaining).padStart(3, '0')}</span>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => resetGameInternals(difficultyKey)} className="hover:bg-accent">
+        <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => { if (!reviewMode) resetGameInternals(difficultyKey); }} 
+            className="hover:bg-accent"
+            disabled={reviewMode}
+            title={reviewMode ? "Reviewing Game" : "Reset Game"}
+        >
           {getGameStatusIcon()}
         </Button>
         <div className="flex items-center text-lg font-semibold">
@@ -272,7 +321,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
         {board.map((row, y) =>
           row.map((cell, x) => (
             <CellComponent
-              key={`${y}-${x}-${gameStatus}-${cell.isRevealed}-${cell.isFlagged}-${cell.isMine}-${cell.adjacentMines}`} 
+              key={`${y}-${x}-${gameStatus}-${cell.isRevealed}-${cell.isFlagged}-${cell.isMine}-${cell.adjacentMines}-${cell.exploded ?? 'noexplode'}`} 
               cell={cell}
               onClick={() => handleCellClick(x, y)}
               onContextMenu={(e) => handleCellContextMenu(e, x, y)}
@@ -281,7 +330,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
         )}
       </div>
       
-      <AlertDialog open={showDialog} onOpenChange={setShowDialog}>
+      <AlertDialog open={showDialog && !reviewMode} onOpenChange={(open) => {if (!reviewMode) setShowDialog(open)}}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center">
@@ -290,16 +339,21 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
             </AlertDialogTitle>
             <AlertDialogDescription>
               {dialogMessage.description}
-              {gameStatus === 'won' && <span className="block mt-2">Your time: {timeElapsed} seconds.</span>}
+               {gameStatus === 'won' && <span className="block mt-2">Your time: {timeElapsed} seconds.</span>}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>
+            <AlertDialogCancel onClick={() => {
+                setShowDialog(false);
+                 if (onGameEnd && (gameStatus === 'won' || gameStatus === 'lost')) {
+                    // This callback might be handled by onGameEnd already if it navigates away
+                    // Consider if explicit navigation or state change is needed here.
+                    // For now, just close the dialog. Parent (PlayPage) handles further actions.
+                 }
+            }}>
               Close
-            </Button>
+            </AlertDialogCancel>
             <AlertDialogAction onClick={() => {
-              // AlertDialogAction implicitly closes the dialog.
-              // Then reset the game. resetGameInternals will also attempt to close dialog (harmless).
               resetGameInternals(difficultyKey);
             }}>
               Play Again

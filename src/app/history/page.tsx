@@ -4,7 +4,7 @@
  import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
  import { useRouter } from 'next/navigation';
  import { useAuth } from '@/hooks/useAuth';
- import { History, CheckCircle2, XCircle, Hourglass, PauseCircle, Trash2, Play } from 'lucide-react'; 
+ import { History, CheckCircle2, XCircle, Hourglass, PauseCircle, Trash2, Play, Eye } from 'lucide-react'; 
  import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
  import { GameSchema, type Game } from '@/lib/firebaseTypes';
  import { collection, query, where, orderBy, limit, writeBatch, getDocs, doc, deleteDoc } from 'firebase/firestore'; 
@@ -93,9 +93,9 @@ import React from 'react';
       if (game.result === 'in-progress') {
         router.push('/play'); 
       } else if (game.result === 'won' || game.result === 'lost') {
-        toast({ title: "Replay Coming Soon", description: "Game replay functionality is not yet implemented."});
+        router.push(`/history/${game.id}`);
       } else if (game.result === 'quit') {
-         toast({ title: "Game Quit", description: "This game was quit and cannot be replayed or continued."});
+         toast({ title: "Game Quit", description: "This game was quit and cannot be reviewed in detail."});
       }
     };
     
@@ -176,7 +176,7 @@ import React from 'react';
            <>
             <div className="flex justify-between items-center mb-8">
              <h1 className="text-3xl font-bold text-foreground">Match History</h1>
-             {games.length > 0 && (
+             {games && games.length > 0 && (
                 <AlertDialog>
                     <AlertDialogTrigger asChild>
                         <Button variant="destructive" disabled={isClearing || isDeleting !== null}>
@@ -273,10 +273,13 @@ import React from 'react';
                                           size="sm" 
                                           onClick={() => handlePlayOrViewGame(game)}
                                           disabled={isDeleting === game.id || isClearing}
-                                          title={game.result === 'in-progress' ? "Continue this game" : (game.result === 'quit' ? "Game was quit" : "View Game Details")}
+                                          title={
+                                            game.result === 'in-progress' ? "Continue this game" :
+                                            (game.result === 'quit' ? "Game was quit" : "Review Game")
+                                          }
                                       >
-                                          {game.result === 'in-progress' ? <Play className="mr-1 h-4 w-4" /> : null}
-                                          {game.result === 'in-progress' ? 'Continue' : (game.result === 'quit' ? 'Details' : 'Details')}
+                                          {game.result === 'in-progress' ? <Play className="mr-1 h-4 w-4" /> : <Eye className="mr-1 h-4 w-4" /> }
+                                          {game.result === 'in-progress' ? 'Continue' : (game.result === 'quit' ? 'Details' : 'Review')}
                                       </Button>
                                       <AlertDialog>
                                         <AlertDialogTrigger asChild>
@@ -314,7 +317,7 @@ import React from 'react';
                         </ul>
                     )}
                  </CardContent>
-                 {games.length > 0 && !gamesLoading && !gamesError && (
+                 {games && games.length > 0 && !gamesLoading && !gamesError && (
                     <CardFooter className="justify-center">
                         <p className="text-sm text-muted-foreground">Showing {games.length} game{games.length === 1 ? '' : 's'}.</p>
                     </CardFooter>
