@@ -1,5 +1,4 @@
-
-// src/app/history/[gameId]/page.tsx
+// src/app/history/game-review/[gameId]/page.tsx
 // NO 'use client' here
 
 import GameReviewClient from '@/components/history/GameReviewClient';
@@ -14,4 +13,3 @@ export async function generateStaticParams() {
 export default function GameReviewPage({ params }: { params: { gameId: string } }) {
   return <GameReviewClient gameId={params.gameId} />;
 }
-
