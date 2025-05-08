@@ -16,13 +16,12 @@ import { ArrowLeft, AlertCircle, CheckCircle2, XCircle, Hourglass, PauseCircle, 
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
-// Removed generateStaticParams as it's not compatible with "use client"
+// generateStaticParams is not needed here because:
+// 1. The page is marked with 'use client', indicating primarily client-side rendering.
+// 2. `output: 'export'` is being removed from next.config.js, allowing dynamic routes to be handled by Next.js without pre-rendering all possible paths.
+// If `output: 'export'` were to be kept, this function would be necessary for static generation of dynamic paths.
 // export async function generateStaticParams() {
-//   // This function should return an array of params for which static pages will be generated at build time.
-//   // For now, we return an empty array, meaning no game review pages are pre-rendered.
-//   // They will be client-side rendered when accessed.
-//   // In a production scenario, you might fetch popular or recent game IDs here.
-//   return [];
+//   return []; // Example: no paths pre-rendered, rely on fallback or client-side rendering.
 // }
 
 const GameResultIcon = ({ result }: { result: Game['result'] }) => {
@@ -128,7 +127,9 @@ export default function GameReviewPage() {
     );
   }
 
-  if (game.userId !== user?.uid && user) {
+  // If user is not logged in (guest), allow viewing if gameId is present (basic review for shared link perhaps)
+  // But if user IS logged in, then verify ownership.
+  if (user && game.userId !== user.uid) {
      return (
       <AppLayout>
         <div className="container mx-auto p-4 md:p-8">
@@ -214,9 +215,9 @@ export default function GameReviewPage() {
               <GameBoard
                 difficultyKey={difficultyKey}
                 initialBoardState={game.gameState}
-                isGuest={!user} // Guest status doesn't really matter for review
+                isGuest={!user} 
                 reviewMode={true}
-                initialTimeElapsed={gameDuration ?? 0} // Pass final time for display
+                initialTimeElapsed={gameDuration ?? 0} 
               />
             ) : (
               <p className="text-muted-foreground text-center py-10">
