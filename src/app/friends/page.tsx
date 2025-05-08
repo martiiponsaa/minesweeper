@@ -8,7 +8,7 @@
  import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
  import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
  import { Separator } from '@/components/ui/separator';
- import { UserPlus, Check, X, Users, Eye } from 'lucide-react';
+ import { UserPlus, Check, X, Users, Eye, Hourglass } from 'lucide-react'; // Added Hourglass
  import { useState, useEffect } from 'react';
  import { useRouter } from 'next/navigation';
  import { useFirestoreDocument } from '@/hooks/useFirestoreDocument';
@@ -28,6 +28,7 @@
     const router = useRouter();
 
     const [friendCodeToAdd, setFriendCodeToAdd] = useState('');
+    const [processingRequestId, setProcessingRequestId] = useState<string | null>(null); // For loading state on buttons
 
     // Fetch current user's data to get their actual friend code and friends list
     const { data: currentUserData, loading: currentUserLoading, error: currentUserError } = useFirestoreDocument<UserType>(
@@ -62,8 +63,8 @@
         UserSchema,
         currentUserData?.friendIds && currentUserData.friendIds.length > 0
             ? [where('id', 'in', currentUserData.friendIds)]
-            : [], // Empty constraints if no friendIds or they are not loaded yet
-        !currentUserData?.friendIds || currentUserData.friendIds.length === 0 // Disable if no friend IDs
+            : [], 
+        !currentUserData?.friendIds || currentUserData.friendIds.length === 0 
     );
 
     // Fetch pending friend requests where the current user is the recipient
@@ -95,7 +96,6 @@
         }
 
         try {
-            // Check if a request already exists (either way)
             const existingRequestQuery1 = query(collection(firestore, 'friendRequests'),
                 where('requesterId', '==', user.uid),
                 where('recipientFriendCode', '==', friendCodeToAdd),
@@ -115,7 +115,6 @@
                 return;
             }
 
-            // Find the recipient user by their friend code
             const usersRef = collection(firestore, 'users');
             const q = query(usersRef, where('userFriendCode', '==', friendCodeToAdd), limit(1));
             const querySnapshot = await getDocs(q);
@@ -133,29 +132,25 @@
                  setFriendCodeToAdd('');
                  return;
             }
-             // Check if already friends
             if (currentUserData.friendIds?.includes(recipientUserData.id)) {
                 toast({ title: "Already Friends", description: "You are already friends with this user.", variant: "default" });
                 setFriendCodeToAdd('')
                 return;
             }
 
-
-            // Create new friend request
             const newRequestRef = doc(collection(firestore, 'friendRequests'));
-            const newRequest: Omit<FriendRequest, 'id'> = { // Firestore will auto-generate ID
+            const newRequest: Omit<FriendRequest, 'id'> = { 
                 requesterId: user.uid,
                 recipientId: recipientUserData.id,
                 status: 'pending',
                 requesterFriendCode: currentUserData.userFriendCode,
                 recipientFriendCode: recipientUserData.userFriendCode,
-                // No need to set 'id' here explicitly when using doc(collection(...))
             };
             await setDoc(newRequestRef, newRequest);
 
             toast({ title: "Friend Request Sent", description: `Request sent to user with code ${friendCodeToAdd}.` });
             setFriendCodeToAdd('');
-            refetchOutgoingRequests(); // Refresh outgoing requests list
+            refetchOutgoingRequests(); 
         } catch (error) {
             console.error("Error sending friend request:", error);
             toast({ title: "Error", description: "Could not send friend request.", variant: "destructive" });
@@ -163,17 +158,18 @@
     };
 
     const handleFriendRequest = async (request: FriendRequest, action: 'accept' | 'reject') => {
-        if (!user || !firestore) return;
+        if (!user || !firestore || processingRequestId === request.id) {
+            return;
+        }
+        setProcessingRequestId(request.id);
 
         const requestDocRef = doc(firestore, 'friendRequests', request.id);
 
         try {
             if (action === 'accept') {
                 const batch = writeBatch(firestore);
-                // Update request status
                 batch.update(requestDocRef, { status: 'accepted' });
 
-                // Add to both users' friend lists
                 const currentUserDocRef = doc(firestore, 'users', user.uid);
                 const requesterUserDocRef = doc(firestore, 'users', request.requesterId);
 
@@ -182,14 +178,16 @@
 
                 await batch.commit();
                 toast({ title: "Friend Added", description: "You are now friends!" });
-            } else { // reject
+            } else { 
                 await updateDoc(requestDocRef, { status: 'rejected' });
                 toast({ title: "Request Rejected", description: "Friend request has been rejected." });
             }
-            refetchIncomingRequests(); // Refresh the list of incoming requests
+            refetchIncomingRequests(); 
         } catch (error) {
             console.error(`Error ${action}ing friend request:`, error);
             toast({ title: "Error", description: `Could not ${action} friend request.`, variant: "destructive" });
+        } finally {
+            setProcessingRequestId(null);
         }
     };
 
@@ -275,7 +273,7 @@
                                <Input
                                   id="myFriendCode"
                                   type="text"
-                                  value={currentUserLoading ? "Loading..." : (!currentUserData?.userFriendCode ? "Generating..." : currentUserData.userFriendCode)}
+                                  value={currentUserLoading ? "Loading..." : (currentUserError ? "Error loading code" : (!currentUserData?.userFriendCode ? "Generating..." : currentUserData.userFriendCode))}
                                   readOnly
                                   className="bg-muted cursor-pointer"
                                   onClick={() => {
@@ -341,11 +339,31 @@
                                         <li key={request.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md">
                                            <p className="font-medium">Request from: {request.requesterFriendCode || "Unknown User"}</p>
                                            <div className="flex gap-2">
-                                               <Button size="sm" variant="outline" onClick={() => handleFriendRequest(request, 'accept')}>
-                                                   <Check className="mr-1 h-4 w-4 text-green-500" /> Accept
-                                               </Button>
-                                               <Button size="sm" variant="outline" onClick={() => handleFriendRequest(request, 'reject')}>
-                                                   <X className="mr-1 h-4 w-4 text-red-500" /> Reject
+                                               <Button 
+                                                    size="sm" 
+                                                    variant="outline" 
+                                                    onClick={() => handleFriendRequest(request, 'accept')}
+                                                    disabled={processingRequestId === request.id}
+                                                >
+                                                    {processingRequestId === request.id ? (
+                                                        <Hourglass className="mr-1 h-4 w-4 animate-spin" /> 
+                                                    ) : (
+                                                        <Check className="mr-1 h-4 w-4 text-green-500" />
+                                                    )}
+                                                    {processingRequestId === request.id ? 'Processing...' : 'Accept'}
+                                                </Button>
+                                               <Button 
+                                                    size="sm" 
+                                                    variant="outline" 
+                                                    onClick={() => handleFriendRequest(request, 'reject')}
+                                                    disabled={processingRequestId === request.id}
+                                                >
+                                                    {processingRequestId === request.id ? (
+                                                        <Hourglass className="mr-1 h-4 w-4 animate-spin" />
+                                                    ) : (
+                                                        <X className="mr-1 h-4 w-4 text-red-500" />
+                                                    )}
+                                                    {processingRequestId === request.id ? 'Processing...' : 'Reject'}
                                                </Button>
                                            </div>
                                         </li>
