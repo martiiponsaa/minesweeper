@@ -16,6 +16,15 @@ import { ArrowLeft, AlertCircle, CheckCircle2, XCircle, Hourglass, PauseCircle, 
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
+// Removed generateStaticParams as it's not compatible with "use client"
+// export async function generateStaticParams() {
+//   // This function should return an array of params for which static pages will be generated at build time.
+//   // For now, we return an empty array, meaning no game review pages are pre-rendered.
+//   // They will be client-side rendered when accessed.
+//   // In a production scenario, you might fetch popular or recent game IDs here.
+//   return [];
+// }
+
 const GameResultIcon = ({ result }: { result: Game['result'] }) => {
   switch (result) {
     case 'won':
