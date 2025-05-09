@@ -1,11 +1,10 @@
-
 {
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
   "hosting": {
-    "public": ".next/static",
+    "public": "out",
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -13,29 +12,41 @@
     ],
     "rewrites": [
       {
-        "source": "/_next/static/**",
-        "destination": "/_next/static/**"
+        "source": "/play",
+        "destination": "/play.html"
+      },
+      {
+        "source": "/login",
+        "destination": "/login.html"
+      },
+      {
+        "source": "/register",
+        "destination": "/register.html"
+      },
+      {
+        "source": "/profile",
+        "destination": "/profile.html"
+      },
+      {
+        "source": "/stats",
+        "destination": "/stats.html"
+      },   
+      {
+        "source": "/friends",
+        "destination": "/friends.html"
+      },
+      {
+        "source": "/(auth))",
+        "destination": "/(auth)).html"
+      },
+      {
+        "source": "/history",
+        "destination": "/history.html"
       },
       {
         "source": "**",
-        "function": "nextjsServer"
+        "destination": "/dashboard.html"
       }
     ]
-  },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "functions",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
-      ],
-      "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" run build"
-      ]
-    }
-  ]
+  }
 }

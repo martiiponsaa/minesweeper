@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "User": {
@@ -38,7 +39,7 @@
           "items": {
             "type": "string"
           },
-          "description": "Array of identifiers for related User entities (friends). (Relationship: User N:N User)"
+          "description": "Array of identifiers for related User entities (friends). (Relationship: User N:N User) - To be deprecated"
         }
       },
       "required": [
@@ -175,6 +176,37 @@
         "requesterFriendCode",
         "recipientFriendCode"
       ]
+    },
+    "Friendship": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Friendship",
+      "description": "Represents a friendship link between two users.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Friendship entity."
+        },
+        "users": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "An array containing the UIDs of the two users in the friendship."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The date and time the friendship was established."
+        }
+      },
+      "required": [
+        "id",
+        "users",
+        "createdAt"
+      ]
     }
   },
   "auth": {
@@ -236,8 +268,24 @@
           ]
         },
         "path": "/friendRequests/{friendRequestId}"
+      },
+      {
+        "definition": {
+          "description": "Collection containing friendship links between users.",
+          "entityName": "Friendship",
+          "schema": {
+            "$ref": "#/backend/entities/Friendship"
+          },
+          "params": [
+            {
+              "description": "The unique ID of the friendship link.",
+              "name": "friendshipId"
+            }
+          ]
+        },
+        "path": "/friendships/{friendshipId}"
       }
     ],
-    "reasoning": "Based on the application proposal and data entities, I recommend the following Firestore structure:\n\n*   **users Collection:** Stores user profile information. Documents are identified by the user's unique ID (`userId`). Key fields include `username`, `password`, `profilePreferences`, `userFriendCode`, and `friendIds`.\n*   **games Collection:** Stores Minesweeper game data. Documents are identified by a unique game ID (`gameId`). Key fields include `userId` (linking to the user who played the game), `startTime`, `endTime`, `gameState`, `difficulty`, `moves`, and `result`.\n*   **friendRequests Collection:** Stores friend request data. Documents are identified by a unique friend request ID (`friendRequestId`). Key fields include `requesterId`, `recipientId`, `requesterFriendCode`, `recipientFriendCode`, and `status`.\n\nThis structure allows efficient querying of user data, game history, and friend relationships. Subcollections are not used to avoid excessive nesting, as the number of games per user is not expected to be extremely large."
+    "reasoning": "Based on the application proposal and data entities, I recommend the following Firestore structure:\n\n*   **users Collection:** Stores user profile information.\n*   **games Collection:** Stores Minesweeper game data.\n*   **friendRequests Collection:** Stores friend request data.\n*   **friendships Collection:** Stores documents representing a friendship link between two users. Each document contains an array of two user UIDs. This is used instead of storing friend lists directly in user documents to simplify permissions and improve scalability.\n\nThis structure allows efficient querying of user data, game history, and friend relationships."
   }
 }

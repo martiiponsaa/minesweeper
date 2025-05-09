@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -15,10 +14,10 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, Go
 import { getFirebase } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { FcGoogle } from "react-icons/fc"; // Using react-icons for Google icon
-import { User as LucideUser } from 'lucide-react'; // For anonymous icon
-import { doc, setDoc } from 'firebase/firestore';
-import { generateRandomFriendCode } from '@/lib/utils'; // Import the new function
+import { FcGoogle } from "react-icons/fc"; 
+import { User as LucideUser } from 'lucide-react'; 
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { generateRandomFriendCode } from '@/lib/utils'; 
 
 // Validation Schemas
 const LoginSchema = z.object({
@@ -39,7 +38,7 @@ export default function AuthForm() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
-  const { auth, firestore } = getFirebase(); // Added firestore
+  const { auth, firestore } = getFirebase(); 
 
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(LoginSchema),
@@ -69,7 +68,7 @@ export default function AuthForm() {
     switch (error.code) {
       case 'auth/user-not-found':
       case 'auth/wrong-password':
-      case 'auth/invalid-credential': // Common for wrong password/email combination
+      case 'auth/invalid-credential': 
         message = 'Invalid email or password.';
         loginForm.setError("email", { type: "manual", message: " " });
         loginForm.setError("password", { type: "manual", message: "Invalid email or password."});
@@ -108,7 +107,6 @@ export default function AuthForm() {
           message = 'This domain is not authorized for OAuth operations. Please check your Firebase project settings (Authentication -> Sign-in method -> Authorized domains) and add your current domain (e.g., localhost if developing locally). If using emulators, this might also indicate an issue with emulator configuration or accessibility.';
           break;
       default:
-        // Keep the generic message for other errors
         break;
     }
     toast({
@@ -134,24 +132,23 @@ export default function AuthForm() {
      setIsLoading(true);
      try {
        const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
-       const userFriendCode = generateRandomFriendCode(); // Use new random code generator
+       const userFriendCodeValue = generateRandomFriendCode(); 
 
-       // Update Firebase Auth profile
        await updateProfile(userCredential.user, { displayName: values.username });
 
-       // Save initial user data to Firestore
        const userDocRef = doc(firestore, 'users', userCredential.user.uid);
        await setDoc(userDocRef, {
          id: userCredential.user.uid,
          username: values.username,
          email: userCredential.user.email,
-         userFriendCode: userFriendCode,
+         userFriendCode: userFriendCodeValue,
          profilePreferences: {
            displayName: values.username,
            avatar: '',
          },
-         friendCodes: [],
-         friendIds: [],
+         // friendCodes: [], // Deprecated
+         // friendIds: [], // Deprecated in favor of friendships collection
+         createdAt: serverTimestamp(), // Optional: track user creation time
        }, { merge: true });
 
        handleAuthSuccess('Registration Successful');
@@ -168,22 +165,22 @@ export default function AuthForm() {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
-      const userFriendCode = generateRandomFriendCode(); // Use new random code generator
+      const userFriendCodeValue = generateRandomFriendCode(); 
 
-      // Save/update user data to Firestore on Google sign-in
       const userDocRef = doc(firestore, 'users', user.uid);
       await setDoc(userDocRef, {
         id: user.uid,
         username: user.displayName || user.email?.split('@')[0] || `user_${user.uid.substring(0,5)}`,
         email: user.email,
-        userFriendCode: userFriendCode,
+        userFriendCode: userFriendCodeValue,
         profilePreferences: {
           displayName: user.displayName || user.email?.split('@')[0] || `User ${user.uid.substring(0,5)}`,
           avatar: user.photoURL || '',
         },
-        friendCodes: [],
-        friendIds: [],
-      }, { merge: true });
+        // friendCodes: [], // Deprecated
+        // friendIds: [], // Deprecated in favor of friendships collection
+        createdAt: serverTimestamp(), // Optional: track user creation/update time
+      }, { merge: true }); // Use merge: true to not overwrite existing data if user signs in with Google after email/pass
 
       handleAuthSuccess('Signed in with Google');
     } catch (error) {
@@ -195,6 +192,8 @@ export default function AuthForm() {
 
    const handleAnonymousSignIn = async () => {
       setIsLoading(true);
+      // No actual Firebase anonymous sign-in to keep guest user truly ephemeral client-side
+      // The useAuth hook will reflect user as null
       router.push('/dashboard');
       toast({ title: "Entering as Guest", description: "Your progress will not be saved." });
       setIsLoading(false);
@@ -215,7 +214,6 @@ export default function AuthForm() {
               <TabsTrigger value="register">Register</TabsTrigger>
             </TabsList>
 
-            {/* Login Tab */}
             <TabsContent value="login">
               <Form {...loginForm}>
                 <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
@@ -252,7 +250,6 @@ export default function AuthForm() {
               </Form>
             </TabsContent>
 
-            {/* Register Tab */}
             <TabsContent value="register">
               <Form {...registerForm}>
                 <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-4">

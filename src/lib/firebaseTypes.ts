@@ -17,7 +17,7 @@ export const UserSchema = z.object({
   }).optional(),
   userFriendCode: z.string().length(10, "Friend code must be 10 characters").optional(), // User's own friend code
   friendCodes: z.array(z.string()).optional(), // Potentially for codes they've entered, or can be deprecated
-  friendIds: z.array(z.string()).optional(), // Array of UIDs of their friends
+  friendIds: z.array(z.string()).optional(), // Array of UIDs of their friends - will be deprecated in favor of Friendships collection
 });
 
 export type User = z.infer<typeof UserSchema>;
@@ -67,6 +67,15 @@ export const FriendRequestSchema = z.object({
 });
 
 export type FriendRequest = z.infer<typeof FriendRequestSchema>;
+
+// Friendship Entity
+export const FriendshipSchema = z.object({
+  id: z.string(),
+  users: z.array(z.string()).length(2, "Friendship must involve two users"), // Array containing two user UIDs
+  createdAt: timestampSchema,
+});
+export type Friendship = z.infer<typeof FriendshipSchema>;
+
 
 // Zod schema for updating user profile preferences
 export const ProfilePreferencesSchema = z.object({

@@ -1,54 +1,77 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow public read access to all collections.
-    // Warning: Remove or restrict this rule in production for sensitive data.
-    match /{document=**} {
-      allow read: if true;
-    }
 
-    // Rules for the 'users' collection.
+    // Users:
+    // - Can read their own document.
+    // - Can create their own document upon registration.
+    // - Can update their own document (e.g., profile preferences).
     match /users/{userId} {
-      // Allow users to read their own profile data.
-      allow get: if request.auth != null && request.auth.uid == userId;
-
-      // Allow users to create their profile if authenticated.
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null && request.auth.uid == userId;
-
-      // Allow users to update their own profile data without restriction.
       allow update: if request.auth != null && request.auth.uid == userId;
-
-      // Allow users to delete their own profile data.
-      allow delete: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false; // Deleting user accounts might need more complex logic (e.g., admin role or cleanup functions)
     }
 
-    // Rules for the 'games' collection.
+    // Games:
+    // - Can read their own game documents.
+    // - Can create new game documents for themselves.
+    // - Can update their own game documents (e.g., save progress, set result).
+    // - Can delete their own game documents (e.g., clear history).
     match /games/{gameId} {
-      // Allow authenticated users to read games they own.
-      allow get: if request.auth != null && resource.data.userId == request.auth.uid;
-
-      // Allow authenticated users to create new games.
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-
-      // Allow authenticated users to update their own games.
       allow update: if request.auth != null && resource.data.userId == request.auth.uid;
-
-      // Allow authenticated users to delete their own games.
       allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
-    // Rules for the 'friendRequests' collection.
-    match /friendRequests/{friendRequestId} {
-      // Allow authenticated users to create friend requests.
-      allow create: if request.auth != null && request.resource.data.requesterId == request.auth.uid;
+    // FriendRequests:
+    // - Can create a friend request where they are the requester.
+    // - Can read requests where they are the requester or recipient.
+    // - Recipient can update the status of a pending request to 'accepted' or 'rejected'.
+    // - Involved users can delete a request (e.g. requester cancels, or general cleanup).
+    match /friendRequests/{requestId} {
+      allow create: if request.auth != null &&
+                      request.resource.data.requesterId == request.auth.uid &&
+                      request.resource.data.status == 'pending';
+      allow read: if request.auth != null &&
+                    (resource.data.requesterId == request.auth.uid || resource.data.recipientId == request.auth.uid);
+      allow update: if request.auth != null &&
+                      resource.data.recipientId == request.auth.uid && // Only recipient can accept/reject
+                      (request.resource.data.status == 'accepted' || request.resource.data.status == 'rejected') &&
+                      resource.data.status == 'pending'; // Can only update pending requests
+      allow delete: if request.auth != null &&
+                      (resource.data.requesterId == request.auth.uid || resource.data.recipientId == request.auth.uid);
+    }
 
-      // Allow authenticated users to read friend requests where they are the requester or recipient.
-      allow get: if request.auth != null && (resource.data.requesterId == request.auth.uid || resource.data.recipientId == request.auth.uid);
+    // Friendships:
+    // - Can create a friendship link if they are one of the users in the 'users' array,
+    //   the 'users' array has exactly two distinct UIDs, and a 'createdAt' timestamp is provided.
+    //   This is typically done via a batch write when a friend request is accepted.
+    // - Can read friendship links they are part of.
+    // - Can delete friendship links they are part of (unfriending).
+    match /friendships/{friendshipId} {
+      allow create: if request.auth != null &&
+                      request.resource.data.users is list &&
+                      request.resource.data.users.size() == 2 &&
+                      (request.resource.data.users[0] == request.auth.uid || request.resource.data.users[1] == request.auth.uid) &&
+                      request.resource.data.users[0] != request.resource.data.users[1] && // Cannot friend self
+                      request.resource.data.createdAt == request.time; // Ensure createdAt is server timestamp or app-controlled valid timestamp
 
-      // Allow authenticated users to update friend requests where they are the recipient (e.g., accept/reject).
-      allow update: if request.auth != null && resource.data.recipientId == request.auth.uid;
+      allow read: if request.auth != null &&
+                    resource.data.users is list && resource.data.users.hasAny([request.auth.uid]);
 
-      // No delete rule for friend requests.
+      allow delete: if request.auth != null &&
+                      resource.data.users is list && resource.data.users.hasAny([request.auth.uid]);
+
+      allow update: if false; // Friendships are created/deleted, not typically updated.
+    }
+
+    // Default deny all other access to prevent unintended access.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

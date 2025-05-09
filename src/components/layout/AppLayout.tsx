@@ -61,10 +61,11 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
         <SidebarHeader className="items-center group-data-[collapsible=icon]:justify-center">
           <Link href="/dashboard" className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
             {/* Placeholder logo - replace with actual logo */}
-            <div className="flex items-center justify-center h-8 w-8 bg-accent rounded-full text-accent-foreground font-bold">
-              M
-            </div>
-             <span className="font-semibold text-xl text-primary">MineVerse</span>
+            <img
+                src="/logo.svg"
+                alt="MineVerse Logo"
+                className="h-12 w-12" />
+            <span className="font-semibold text-xl text-primary">MineVerse</span>
           </Link>
           <SidebarTrigger className="md:hidden" /> {/* Trigger only for mobile */}
         </SidebarHeader>
