@@ -14,10 +14,11 @@ export const UserSchema = z.object({
   profilePreferences: z.object({
     displayName: z.string().optional(),
     avatar: z.string().optional(),
-  }).optional(),
-  userFriendCode: z.string().length(10, "Friend code must be 10 characters").optional(), // User's own friend code
-  friendCodes: z.array(z.string()).optional(), // Potentially for codes they've entered, or can be deprecated
-  friendIds: z.array(z.string()).optional(), // Array of UIDs of their friends - will be deprecated in favor of Friendships collection
+  }).nullable().optional(), // Made nullable and optional
+  userFriendCode: z.string().length(10, "Friend code must be 10 characters").optional(),
+  friendCodes: z.array(z.string()).nullable().optional(), // Made nullable and optional
+  friendIds: z.array(z.string()).nullable().optional(), // Made nullable and optional
+  createdAt: timestampSchema.nullable().optional(), // Added as nullable and optional
 });
 
 export type User = z.infer<typeof UserSchema>;
@@ -26,7 +27,7 @@ export type User = z.infer<typeof UserSchema>;
 // Game Move Entity (Sub-object within Game)
 export const MoveSchema = z.object({
   timestamp: timestampSchema,
-  action: z.string(),
+  action: z.string(), // e.g., "reveal", "flag"
   x: z.number().int(),
   y: z.number().int(),
 });
@@ -47,7 +48,7 @@ export const GameSchema = z.object({
   difficulty: z.string(),
   moves: z.array(MoveSchema).optional(),
   result: GameResultSchema.nullable(),
-  lastSavedTime: timestampSchema.optional().nullable(), // Added for tracking last save
+  lastSavedTime: timestampSchema.optional().nullable(),
 });
 
 export type Game = z.infer<typeof GameSchema>;
@@ -62,8 +63,9 @@ export const FriendRequestSchema = z.object({
   requesterId: z.string(),
   recipientId: z.string(),
   status: FriendRequestStatusSchema,
-  requesterFriendCode: z.string().optional(), // Store requester's friend code for recipient UI
-  recipientFriendCode: z.string().optional(), // Store recipient's friend code for requester UI
+  requesterFriendCode: z.string().optional(),
+  recipientFriendCode: z.string().optional(),
+  createdAt: timestampSchema.nullable().optional(), // Added as nullable and optional
 });
 
 export type FriendRequest = z.infer<typeof FriendRequestSchema>;
@@ -71,7 +73,7 @@ export type FriendRequest = z.infer<typeof FriendRequestSchema>;
 // Friendship Entity
 export const FriendshipSchema = z.object({
   id: z.string(),
-  users: z.array(z.string()).length(2, "Friendship must involve two users"), // Array containing two user UIDs
+  users: z.array(z.string()).length(2, "Friendship must involve two users"),
   createdAt: timestampSchema,
 });
 export type Friendship = z.infer<typeof FriendshipSchema>;

@@ -11,11 +11,10 @@ import { DIFFICULTY_LEVELS, type DifficultyKey } from '@/config/minesweeperSetti
 import { useAuth } from '@/hooks/useAuth'; 
 import { useRouter } from 'next/navigation';
 import { Save, LogOutIcon, RotateCcw } from 'lucide-react';
+import { useToast } from '@/components/ui/toaster';
 import { getFirebase } from '@/firebase';
 import { doc, setDoc, Timestamp, collection, updateDoc, query, where, getDocs, writeBatch, limit, orderBy, deleteDoc } from 'firebase/firestore';
-import { useToast } from '@/hooks/use-toast';
-import type { Game, GameResult } from '@/lib/firebaseTypes'; 
-import { GameSchema } from '@/lib/firebaseTypes';
+import { arrayUnion, type FieldValue } from 'firebase/firestore'; import type { Game, GameResult } from '@/lib/firebaseTypes';
 
 const nonJsonGameStates = [
   "INITIAL_BOARD_STATE",
@@ -88,7 +87,7 @@ export default function PlayPage() {
                 try {
                     const querySnapshot = await getDocs(q);
                     if (!querySnapshot.empty) {
-                        const gameDoc = querySnapshot.docs[0];
+                        const gameDoc = querySnapshot.docs[0]; const { GameSchema } = require('@/lib/firebaseTypes');
                         const loadedGame = GameSchema.parse({ id: gameDoc.id, ...gameDoc.data() }) as Game;
                         
                         setGameData(loadedGame);
@@ -217,6 +216,31 @@ export default function PlayPage() {
       setIsSavingOrStarting(false);
     }
   };
+
+  const handleMoveMade = useCallback(async (moveType: 'reveal' | 'flag' | 'unflag', x: number, y: number) => {
+    if (!user || !activeGameIdRef.current || !firestore) {
+      console.warn("Attempted to log move without user, game ID, or firestore.");
+      return;
+    }
+
+    const gameDocRef = doc(firestore, 'games', activeGameIdRef.current);
+    const move = {
+      type: moveType,
+      x,
+      y,
+      timestamp: Timestamp.now(),
+    };
+
+    try {
+      await updateDoc(gameDocRef, {
+        moves: arrayUnion(move),
+      });
+      // Optionally update local gameData state if needed for immediate UI reflection (though not strictly necessary for review)
+      // setGameData(prev => prev ? { ...prev, moves: [...(prev.moves || []), move] } as Game : null);
+    } catch (error) {
+      console.error("Error logging move to Firestore:", error);
+    }
+  }, [user, firestore]);
 
   const handleRestartGame = async () => {
     if (user && activeGameIdRef.current && firestore) {
@@ -485,6 +509,8 @@ export default function PlayPage() {
                 onGameEnd={handleGameEnd}
                 initialBoardState={boardInitialState} 
                 initialTimeElapsed={timeToRestore}
+                onMoveMade={handleMoveMade} // Pass the new handler
+ activeGameId={activeGameId} // Pass the active game ID
               />
             </CardContent>
             <CardFooter className="flex flex-col sm:flex-row justify-between gap-2 pt-4">

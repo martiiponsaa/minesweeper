@@ -158,12 +158,13 @@
 
 
             const newRequestRef = doc(collection(firestore, 'friendRequests'));
-            const newRequest: Omit<FriendRequest, 'id'> = { 
+            const newRequest: Omit<FriendRequest, 'id' | 'createdAt'> &amp; { createdAt: any } = { // Allow any for serverTimestamp initially
                 requesterId: user.uid,
                 recipientId: recipientUserData.id,
                 status: 'pending',
                 requesterFriendCode: currentUserData.userFriendCode,
                 recipientFriendCode: recipientUserData.userFriendCode,
+                createdAt: serverTimestamp(), // Add serverTimestamp here
             };
             await setDoc(newRequestRef, newRequest);
 
@@ -192,7 +193,7 @@
                 // Create a new document in the 'friendships' collection
                 const newFriendshipRef = doc(collection(firestore, 'friendships'));
                 batch.set(newFriendshipRef, {
-                    users: [request.requesterId, user.uid].sort(), // Store UIDs sorted to ensure uniqueness for composite keys if needed later
+                    users: [request.requesterId, user.uid].sort(), 
                     createdAt: serverTimestamp()
                 });
                 
@@ -325,15 +326,15 @@
                             <Separator />
                             <div>
                                 <h3 className="text-md font-semibold mb-2">Sent Requests</h3>
-                                {outgoingRequestsLoading ? <p>Loading sent requests...</p> :
-                                 outgoingRequests.filter(req => req.status === 'pending').length === 0 ? <p className="text-sm text-muted-foreground">No pending sent requests.</p> :
-                                 <ul className="space-y-2">
-                                     {outgoingRequests.filter(req => req.status === 'pending').map(req => (
-                                         <li key={req.id} className="text-sm text-muted-foreground">
+                                {outgoingRequestsLoading ? &lt;p&gt;Loading sent requests...&lt;/p&gt; :
+                                 outgoingRequests.filter(req =&gt; req.status === 'pending').length === 0 ? &lt;p className="text-sm text-muted-foreground"&gt;No pending sent requests.&lt;/p&gt; :
+                                 &lt;ul className="space-y-2"&gt;
+                                     {outgoingRequests.filter(req =&gt; req.status === 'pending').map(req =&gt; (
+                                         &lt;li key={req.id} className="text-sm text-muted-foreground"&gt;
                                              Request sent to code: {req.recipientFriendCode}
-                                         </li>
+                                         &lt;/li&gt;
                                      ))}
-                                 </ul>
+                                 &lt;/ul&gt;
                                 }
                             </div>
                        </CardContent>

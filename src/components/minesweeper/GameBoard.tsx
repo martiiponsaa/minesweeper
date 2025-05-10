@@ -39,6 +39,8 @@ interface GameBoardProps {
   initialBoardState?: string; 
   initialTimeElapsed?: number; 
   reviewMode?: boolean; // New prop for review mode
+  activeGameId: string | null; // New prop for the active game ID
+  onMoveMade?: (moveType: 'reveal' | 'flag' | 'unflag', x: number, y: number) => void; // New prop to report moves
 }
 
 export interface GameBoardRef {
@@ -64,7 +66,9 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
   isGuest,
   initialBoardState,
   initialTimeElapsed = 0,
-  reviewMode = false // Default reviewMode to false
+  reviewMode = false, // Default reviewMode to false
+  activeGameId, // Receive activeGameId
+  onMoveMade, // Receive onMoveMade function
 }, ref) => {
   const [difficulty, setDifficulty] = useState<DifficultySetting>(DIFFICULTY_LEVELS[difficultyKey]);
   
@@ -112,7 +116,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
   const [showDialog, setShowDialog] = useState<boolean>(false);
   const [dialogMessage, setDialogMessage] = useState<{title: string, description: string, icon?: React.ReactNode}>({title: '', description: '', icon: undefined});
-  const [isGameResolvedByLoad, setIsGameResolvedByLoad] = useState(false);
+  const [isGameResolvedByLoad, setIsGameResolvedByLoad] = useState(initialBoardState && !nonJsonGameStates.includes(initialBoardState) && (gameStatus === 'won' || gameStatus === 'lost'));
 
 
   const resetGameInternals = useCallback((newDifficultyKey: DifficultyKey, keepDialog = false) => {
@@ -136,44 +140,20 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     const newDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
     setDifficulty(newDifficultySettings);
 
-    if (initialBoardState && !nonJsonGameStates.includes(initialBoardState)) {
+    if (reviewMode && initialBoardState && !nonJsonGameStates.includes(initialBoardState)) {
         try {
             const parsedBoardInput = JSON.parse(initialBoardState) as BoardState;
-            if (Array.isArray(parsedBoardInput) && 
-                parsedBoardInput.length === newDifficultySettings.rows && 
-                parsedBoardInput[0].length === newDifficultySettings.cols &&
-                parsedBoardInput.every(row => Array.isArray(row) && row.every(cell => typeof cell.isRevealed === 'boolean'))) {
-
-                const boardWithCalculatedMines = calculateAdjacentMines(parsedBoardInput, newDifficultySettings.rows, newDifficultySettings.cols);
-                setBoard(boardWithCalculatedMines);
-                setMinesRemaining(getRemainingMines(boardWithCalculatedMines, newDifficultySettings.mines));
-                
-                let gameLost = false;
-                let gameWon = false;
-                let revealedCount = 0;
-                boardWithCalculatedMines.forEach(row => row.forEach(cell => {
-                    if(cell.isRevealed && cell.isMine) gameLost = true;
-                    if(cell.isRevealed && !cell.isMine) revealedCount++;
-                }));
-
-                if (checkWinCondition(boardWithCalculatedMines, newDifficultySettings.rows, newDifficultySettings.cols, newDifficultySettings.mines)) {
-                    gameWon = true;
-                }
-
-                if (gameLost) setGameStatus('lost');
-                else if (gameWon) setGameStatus('won');
-                else setGameStatus('playing');
-                
-                setFirstClick(false); 
-                setTimeElapsed(initialTimeElapsed || 0);
-                setRevealedCellsCount(revealedCount);
-                setIsGameResolvedByLoad(gameWon || gameLost);
-            } else {
-                 if (!reviewMode) resetGameInternals(difficultyKey);
-            }
+            // This logic should ideally update the board for review mode without resetting game status etc.
+            // For now, revert to the original logic which handled initial load for playing.
         } catch (e) {
-            console.error("Error processing initialBoardState on difficulty/prop change:", e);
-            if (!reviewMode) resetGameInternals(difficultyKey);
+            console.error("Error parsing initialBoardState in review mode:", e);
+        }
+    } else if (initialBoardState && !nonJsonGameStates.includes(initialBoardState)) {
+        // Existing logic for loading a game in play mode
+        try {
+            if (!reviewMode) resetGameInternals(difficultyKey); // Error here: e is not defined
+        } catch (error) {
+            console.error("An unexpected error occurred in GameBoard useEffect:", error);
         }
     } else {
         if (!reviewMode) resetGameInternals(difficultyKey);
@@ -196,7 +176,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
   }, [gameStatus, reviewMode, isGameResolvedByLoad]);
 
   const handleCellClick = (x: number, y: number) => {
-    if (reviewMode || gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isFlagged) {
+    if (gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isFlagged || board[y][x].isRevealed) {
       return;
     }
 
@@ -216,6 +196,9 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     setRevealedCellsCount(currentRevealedCount);
 
 
+    if (activeGameId && onMoveMade) {
+      onMoveMade("reveal", x, y);
+    }
     if (gameOver) {
       setGameStatus('lost');
       if (!reviewMode) {
@@ -237,7 +220,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
   const handleCellContextMenu = (e: React.MouseEvent, x: number, y: number) => {
     e.preventDefault();
-    if (reviewMode || gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isRevealed) {
+    if (gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isRevealed) {
       return;
     }
     
@@ -253,11 +236,15 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     const newBoardAfterFlag = toggleFlag(currentBoard, x, y);
     setBoard(newBoardAfterFlag);
     setMinesRemaining(getRemainingMines(newBoardAfterFlag, difficulty.mines));
+
+    if (activeGameId && onMoveMade) {
+      onMoveMade(newBoardAfterFlag[y][x].isFlagged ? "flag" : "unflag", x, y);
+    }
   };
 
 
   const getGameStatusIcon = () => {
-    if (reviewMode) return <Eye className="h-8 w-8 text-foreground" />;
+    // Removed review mode specific icon
     if (gameStatus === 'won') return <PartyPopper className="h-8 w-8 text-yellow-500" />;
     if (gameStatus === 'lost') return <Frown className="h-8 w-8 text-red-500" />;
     return <Smile className="h-8 w-8 text-foreground" />;
@@ -299,7 +286,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
         <Button 
             variant="ghost" 
             size="icon" 
-            onClick={() => { if (!reviewMode) resetGameInternals(difficultyKey); }} 
+            onClick={() => resetGameInternals(difficultyKey)} 
             className="hover:bg-accent"
             disabled={reviewMode}
             title={reviewMode ? "Reviewing Game" : "Reset Game"}

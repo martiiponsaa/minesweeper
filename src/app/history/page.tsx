@@ -93,7 +93,7 @@ import React from 'react';
       if (game.result === 'in-progress') {
         router.push('/play'); 
       } else if (game.result === 'won' || game.result === 'lost') {
-        router.push(`/history/game-review/${game.id}`);
+        router.push(`/history/game-review?gameId=${game.id}`);
       } else if (game.result === 'quit') {
          toast({ title: "Game Quit", description: "This game was quit and cannot be reviewed in detail."});
       }
