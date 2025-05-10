@@ -42,7 +42,7 @@ export default function GameReviewPage() {
     GameSchema
   );
 
-  const [currentMoveIndex, setCurrentMoveIndex] = React.useState<number>(-1);
+  const [currentMoveIndex, setCurrentMoveIndex] = React.useState<number>(0); // Start at the first move (index 0)
   const [replayedBoardState, setReplayedBoardState] = React.useState<BoardState | null>(null);
   const [replayedTimeElapsed, setReplayedTimeElapsed] = React.useState<number>(0);
 
@@ -65,62 +65,30 @@ export default function GameReviewPage() {
     let targetBoard: BoardState;
     let targetTime: number = 0;
 
-    if (currentMoveIndex === -1) { // Represents the final state of the game or initial if no moves
-      if (game.gameState && !nonJsonGameStates.includes(game.gameState)) {
-        try {
-          targetBoard = JSON.parse(game.gameState) as BoardState;
-          if (!Array.isArray(targetBoard) || targetBoard.length === 0 || !Array.isArray(targetBoard[0]) || 
-              targetBoard.length !== difficultySettings.rows || targetBoard[0].length !== difficultySettings.cols) {
-            throw new Error("Invalid board structure or dimensions in gameState");
-          }
-          targetBoard = calculateAdjacentMines(targetBoard, difficultySettings.rows, difficultySettings.cols);
+    // Replaying a specific move (currentMoveIndex >= 0)
+    targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
+    if (game.moves && game.moves.length > 0 && game.startTime) {
+      // Ensure currentMoveIndex is within bounds
+      const effectiveMoveIndex = Math.min(currentMoveIndex, game.moves.length - 1);
 
-          if (game.endTime && game.startTime) {
-            targetTime = Math.round((game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
-          } else if (game.moves && game.moves.length > 0 && game.startTime) {
-            const lastMove = game.moves[game.moves.length - 1];
-            if (lastMove.timestamp) {
-              targetTime = Math.round((lastMove.timestamp.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
-            }
-          } else {
-            targetTime = 0;
-          }
-
-        } catch (e) {
-          console.error("Error parsing game.gameState for final state, falling back to initial board:", e);
-          targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
-          targetTime = 0;
+      for (let i = 0; i <= effectiveMoveIndex; i++) {
+        const move = game.moves[i];
+        if (move.action === 'reveal') {
+          const result = revealCell(targetBoard, difficultySettings.rows, difficultySettings.cols, move.x, move.y);
+          targetBoard = result.newBoard;
+          if (result.gameOver) break; // Stop applying moves if the game ended
+        } else if (move.action === 'flag' || move.action === 'unflag') {
+          targetBoard = toggleFlag(targetBoard, move.x, move.y);
         }
-      } else {
-        // No valid final gameState, show an initial board
+        // Update time based on this move's timestamp
+        if (move.timestamp) {
+          targetTime = Math.round((move.timestamp.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
+        }
+      }
+    } else {
+        // If no moves, reset to initial board and time
         targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
-        if (game.result === 'won' || game.result === 'lost') {
-             // If game was won/lost but gameState is missing/invalid, try to get time from game object
-             if (game.endTime && game.startTime) {
-                targetTime = Math.round((game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
-             }
-        } else {
-            targetTime = 0;
-        }
-      }
-    } else { // Replaying a specific move (currentMoveIndex >= 0)
-      targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
-      if (game.moves && game.moves.length > 0 && game.startTime) {
-        for (let i = 0; i <= currentMoveIndex && i < game.moves.length; i++) {
-          const move = game.moves[i];
-          if (move.action === 'reveal') {
-            const result = revealCell(targetBoard, difficultySettings.rows, difficultySettings.cols, move.x, move.y);
-            targetBoard = result.newBoard;
-            if (result.gameOver) break; 
-          } else if (move.action === 'flag' || move.action === 'unflag') {
-            targetBoard = toggleFlag(targetBoard, move.x, move.y);
-          }
-          // Update time based on this move's timestamp
-          if (move.timestamp) {
-            targetTime = Math.round((move.timestamp.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
-          }
-        }
-      }
+        targetTime = 0;
     }
 
     setReplayedBoardState(targetBoard);
@@ -185,8 +153,8 @@ export default function GameReviewPage() {
                 <div className="flex flex-col items-center space-y-4">
                   <div className="w-full p-0 sm:p-2 md:p-4">
                     <GameBoard
-                      difficultyKey={game.difficulty.toLowerCase() as DifficultyKey}
-                      initialBoardState={JSON.stringify(replayedBoardState)}
+                      difficultyKey={game.difficulty.toLowerCase() as DifficultyKey} // Assuming difficultyKey is lower case
+                      currentBoardState={JSON.stringify(replayedBoardState)} // Renamed prop
                       initialTimeElapsed={replayedTimeElapsed}
                       reviewMode={true}
                       isGuest={true} 
@@ -197,17 +165,17 @@ export default function GameReviewPage() {
                   {game.moves && game.moves.length > 0 && (
                     <div className="flex justify-center items-center space-x-4">
                       <Button
-                        onClick={() => setCurrentMoveIndex(prev => Math.max(-1, prev - 1))}
-                        disabled={currentMoveIndex < 0} // Disabled if at final state or first move
+                        onClick={() => setCurrentMoveIndex(prev => Math.max(0, prev - 1))}
+                        disabled={currentMoveIndex <= 0} // Disabled if at the first move
                         variant="outline"
                       >
                         <ChevronLeft className="mr-2 h-4 w-4" /> Previous
                       </Button>
                       <span className="text-sm text-muted-foreground tabular-nums w-40 text-center">
-                        Move: {currentMoveIndex === -1 ? 'Final State' : `${currentMoveIndex + 1} / ${game.moves.length}`}
+                        Move: {`${currentMoveIndex + 1} / ${game.moves.length}`}\
                       </span>
                       <Button
-                        onClick={() => setCurrentMoveIndex(prev => Math.min(game.moves.length - 1, prev + 1))}
+                        onClick={() => setCurrentMoveIndex(prev => Math.min((game.moves?.length || 1) - 1, prev + 1))}
                         disabled={currentMoveIndex >= game.moves.length - 1}
                         variant="outline"
                       >

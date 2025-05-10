@@ -158,7 +158,7 @@
 
 
             const newRequestRef = doc(collection(firestore, 'friendRequests'));
-            const newRequest: Omit<FriendRequest, 'id' | 'createdAt'> &amp; { createdAt: any } = { // Allow any for serverTimestamp initially
+            const newRequest: Omit<FriendRequest, 'id' | 'createdAt'> & { createdAt: any } = { // Allow any for serverTimestamp initially
                 requesterId: user.uid,
                 recipientId: recipientUserData.id,
                 status: 'pending',
@@ -326,15 +326,15 @@
                             <Separator />
                             <div>
                                 <h3 className="text-md font-semibold mb-2">Sent Requests</h3>
-                                {outgoingRequestsLoading ? &lt;p&gt;Loading sent requests...&lt;/p&gt; :
-                                 outgoingRequests.filter(req =&gt; req.status === 'pending').length === 0 ? &lt;p className="text-sm text-muted-foreground"&gt;No pending sent requests.&lt;/p&gt; :
-                                 &lt;ul className="space-y-2"&gt;
-                                     {outgoingRequests.filter(req =&gt; req.status === 'pending').map(req =&gt; (
-                                         &lt;li key={req.id} className="text-sm text-muted-foreground"&gt;
+                                {outgoingRequestsLoading ? <p>Loading sent requests...</p> :
+                                 outgoingRequests.filter(req => req.status === 'pending').length === 0 ? <p className="text-sm text-muted-foreground">No pending sent requests.</p> :
+                                 <ul className="space-y-2">
+                                     {outgoingRequests.filter(req => req.status === 'pending').map(req => (
+                                         <li key={req.id} className="text-sm text-muted-foreground">
                                              Request sent to code: {req.recipientFriendCode}
-                                         &lt;/li&gt;
+                                         </li>
                                      ))}
-                                 &lt;/ul&gt;
+                                 </ul>
                                 }
                             </div>
                        </CardContent>
