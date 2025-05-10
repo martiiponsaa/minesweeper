@@ -42,12 +42,14 @@ export default function GameReviewPage() {
     GameSchema
   );
 
-  const [currentMoveIndex, setCurrentMoveIndex] = React.useState<number>(-1); // -1 for initial state (final board or initial if no moves)
+  const [currentMoveIndex, setCurrentMoveIndex] = React.useState<number>(-1);
   const [replayedBoardState, setReplayedBoardState] = React.useState<BoardState | null>(null);
+  const [replayedTimeElapsed, setReplayedTimeElapsed] = React.useState<number>(0);
 
   React.useEffect(() => {
     if (!game?.difficulty) {
       setReplayedBoardState(null);
+      setReplayedTimeElapsed(0);
       return;
     }
     const difficultySettings = Object.values(DIFFICULTY_LEVELS).find(
@@ -56,46 +58,73 @@ export default function GameReviewPage() {
     if (!difficultySettings) {
       console.error(`Unknown difficulty: ${game.difficulty}`);
       setReplayedBoardState(null);
+      setReplayedTimeElapsed(0);
       return;
     }
 
-    // Handle initial state or when no moves are to be replayed (currentMoveIndex is -1)
-    if (currentMoveIndex === -1 || !game.moves || game.moves.length === 0) {
+    let targetBoard: BoardState;
+    let targetTime: number = 0;
+
+    if (currentMoveIndex === -1) { // Represents the final state of the game or initial if no moves
       if (game.gameState && !nonJsonGameStates.includes(game.gameState)) {
         try {
-          const boardFromGameState = JSON.parse(game.gameState) as BoardState;
-          // Ensure it's a valid board structure before using
-          if (Array.isArray(boardFromGameState) && boardFromGameState.length > 0 && Array.isArray(boardFromGameState[0])) {
-             setReplayedBoardState(calculateAdjacentMines(boardFromGameState, difficultySettings.rows, difficultySettings.cols));
-          } else {
-            throw new Error("Invalid board structure in gameState");
+          targetBoard = JSON.parse(game.gameState) as BoardState;
+          if (!Array.isArray(targetBoard) || targetBoard.length === 0 || !Array.isArray(targetBoard[0]) || 
+              targetBoard.length !== difficultySettings.rows || targetBoard[0].length !== difficultySettings.cols) {
+            throw new Error("Invalid board structure or dimensions in gameState");
           }
+          targetBoard = calculateAdjacentMines(targetBoard, difficultySettings.rows, difficultySettings.cols);
+
+          if (game.endTime && game.startTime) {
+            targetTime = Math.round((game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
+          } else if (game.moves && game.moves.length > 0 && game.startTime) {
+            const lastMove = game.moves[game.moves.length - 1];
+            if (lastMove.timestamp) {
+              targetTime = Math.round((lastMove.timestamp.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
+            }
+          } else {
+            targetTime = 0;
+          }
+
         } catch (e) {
-          console.error("Error parsing game.gameState, falling back to initial board:", e);
-          setReplayedBoardState(createInitialBoard(difficultySettings.rows, difficultySettings.cols));
+          console.error("Error parsing game.gameState for final state, falling back to initial board:", e);
+          targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
+          targetTime = 0;
         }
       } else {
-        // No valid gameState, or no moves exist, show a clean initial board for that difficulty
-        setReplayedBoardState(createInitialBoard(difficultySettings.rows, difficultySettings.cols));
+        // No valid final gameState, show an initial board
+        targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
+        if (game.result === 'won' || game.result === 'lost') {
+             // If game was won/lost but gameState is missing/invalid, try to get time from game object
+             if (game.endTime && game.startTime) {
+                targetTime = Math.round((game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
+             }
+        } else {
+            targetTime = 0;
+        }
       }
-      return;
+    } else { // Replaying a specific move (currentMoveIndex >= 0)
+      targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
+      if (game.moves && game.moves.length > 0 && game.startTime) {
+        for (let i = 0; i <= currentMoveIndex && i < game.moves.length; i++) {
+          const move = game.moves[i];
+          if (move.action === 'reveal') {
+            const result = revealCell(targetBoard, difficultySettings.rows, difficultySettings.cols, move.x, move.y);
+            targetBoard = result.newBoard;
+            if (result.gameOver) break; 
+          } else if (move.action === 'flag' || move.action === 'unflag') {
+            targetBoard = toggleFlag(targetBoard, move.x, move.y);
+          }
+          // Update time based on this move's timestamp
+          if (move.timestamp) {
+            targetTime = Math.round((move.timestamp.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
+          }
+        }
+      }
     }
 
-    // Replay moves up to currentMoveIndex
-    // Note: This replay is "visual actions" only; mine interactions may not be 100% accurate
-    // if the original mine placement isn't part of the starting board for this replay sequence.
-    // We start from a blank initial board and apply moves.
-    let boardInProgress = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
-    for (let i = 0; i <= currentMoveIndex && i < game.moves.length; i++) {
-      const move = game.moves[i];
-      if (move.action === 'reveal') {
-        const result = revealCell(boardInProgress, difficultySettings.rows, difficultySettings.cols, move.x, move.y);
-        boardInProgress = result.newBoard;
-      } else if (move.action === 'flag' || move.action === 'unflag') {
-        boardInProgress = toggleFlag(boardInProgress, move.x, move.y);
-      }
-    }
-    setReplayedBoardState(boardInProgress);
+    setReplayedBoardState(targetBoard);
+    setReplayedTimeElapsed(targetTime);
 
   }, [game, currentMoveIndex]);
 
@@ -152,32 +181,30 @@ export default function GameReviewPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Game Board and Replay Controls Section */}
               {replayedBoardState && (
                 <div className="flex flex-col items-center space-y-4">
-                  {/* Game Board */}
                   <div className="w-full p-0 sm:p-2 md:p-4">
                     <GameBoard
                       difficultyKey={game.difficulty.toLowerCase() as DifficultyKey}
                       initialBoardState={JSON.stringify(replayedBoardState)}
-                      reviewMode={true} // Ensures board is not interactive
+                      initialTimeElapsed={replayedTimeElapsed}
+                      reviewMode={true}
                       isGuest={true} 
                       activeGameId={game.id}
                     />
                   </div>
 
-                  {/* Replay Controls - only if there are moves */}
                   {game.moves && game.moves.length > 0 && (
                     <div className="flex justify-center items-center space-x-4">
                       <Button
                         onClick={() => setCurrentMoveIndex(prev => Math.max(-1, prev - 1))}
-                        disabled={currentMoveIndex <= -1}
+                        disabled={currentMoveIndex < 0} // Disabled if at final state or first move
                         variant="outline"
                       >
                         <ChevronLeft className="mr-2 h-4 w-4" /> Previous
                       </Button>
-                      <span className="text-sm text-muted-foreground">
-                        Move: {currentMoveIndex === -1 ? 'Initial / Final State' : currentMoveIndex + 1} of {game.moves.length}
+                      <span className="text-sm text-muted-foreground tabular-nums w-40 text-center">
+                        Move: {currentMoveIndex === -1 ? 'Final State' : `${currentMoveIndex + 1} / ${game.moves.length}`}
                       </span>
                       <Button
                         onClick={() => setCurrentMoveIndex(prev => Math.min(game.moves.length - 1, prev + 1))}
@@ -201,9 +228,7 @@ export default function GameReviewPage() {
                 </Alert>
               )}
 
-
-              {/* Game Details Accordion */}
-              <Accordion type="single" collapsible className="w-full"> {/* Removed defaultValue to make it closed by default */}
+              <Accordion type="single" collapsible className="w-full">
                 <AccordionItem value="game-details">
                   <AccordionTrigger>Game Details</AccordionTrigger>
                   <AccordionContent className="space-y-2 pt-2">

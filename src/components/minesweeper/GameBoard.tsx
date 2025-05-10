@@ -79,7 +79,12 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
         const parsedBoard = JSON.parse(initialBoardState) as BoardState;
         if (Array.isArray(parsedBoard) && parsedBoard.length > 0 && Array.isArray(parsedBoard[0])) {
             if (parsedBoard.every(row => Array.isArray(row) && row.every(cell => typeof cell.isRevealed === 'boolean'))) {
-                return calculateAdjacentMines(parsedBoard, parsedBoard.length, parsedBoard[0].length);
+                // Ensure correct dimensions for the parsed board
+                if (parsedBoard.length === currentDifficultySettings.rows && parsedBoard[0].length === currentDifficultySettings.cols) {
+                    return calculateAdjacentMines(parsedBoard, parsedBoard.length, parsedBoard[0].length);
+                } else {
+                    console.warn("Parsed initialBoardState dimensions mismatch, falling back to new board.");
+                }
             }
         }
         console.warn("Invalid initialBoardState structure, falling back to new board.");
@@ -91,21 +96,22 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
   });
 
   const [gameStatus, setGameStatus] = useState<GameStatus>(() => {
-    // In review mode, status is 'playing' to show board, but interactions are disabled.
-    // Game ending logic (win/loss dialogs) is also suppressed.
     if (reviewMode) return 'playing'; 
     return initialBoardState && !nonJsonGameStates.includes(initialBoardState) ? 'playing' : 'ready';
   });
 
   const [minesRemaining, setMinesRemaining] = useState<number>(() => {
       const currentDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
-      // In review mode, calculate based on actual mines in loaded state if possible, else default
-      if (reviewMode && initialBoardState && !nonJsonGameStates.includes(initialBoardState)) {
+      if (initialBoardState && !nonJsonGameStates.includes(initialBoardState)) {
         try {
           const parsedBoard = JSON.parse(initialBoardState) as BoardState;
-          return getRemainingMines(parsedBoard, currentDifficultySettings.mines);
+           if (Array.isArray(parsedBoard) && parsedBoard.length > 0 && Array.isArray(parsedBoard[0]) &&
+               parsedBoard.length === currentDifficultySettings.rows && parsedBoard[0].length === currentDifficultySettings.cols) {
+              return getRemainingMines(parsedBoard, currentDifficultySettings.mines);
+           }
         } catch (e) { /* fallback to default */ }
       }
+      // If initialBoardState is not provided or invalid, use the board state initialized above
       return getRemainingMines(board, currentDifficultySettings.mines);
   });
 
@@ -123,7 +129,6 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
   const [showDialog, setShowDialog] = useState<boolean>(false);
   const [dialogMessage, setDialogMessage] = useState<{title: string, description: string, icon?: React.ReactNode}>({title: '', description: '', icon: undefined});
   
-  // This state helps prevent game end logic from re-triggering if board is loaded in a resolved state
   const [isGameResolvedByLoad, setIsGameResolvedByLoad] = useState(
     initialBoardState && !nonJsonGameStates.includes(initialBoardState) && 
     (gameStatus === 'won' || gameStatus === 'lost') && !reviewMode
@@ -134,9 +139,10 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     if (reviewMode) return; 
     const newDifficultySettings = DIFFICULTY_LEVELS[newDifficultyKey];
     setDifficulty(newDifficultySettings);
-    setBoard(createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols));
+    const freshBoard = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
+    setBoard(freshBoard);
     setGameStatus('ready');
-    setMinesRemaining(newDifficultySettings.mines);
+    setMinesRemaining(getRemainingMines(freshBoard, newDifficultySettings.mines));
     setTimeElapsed(0); 
     setFirstClick(true);
     setRevealedCellsCount(0);
@@ -167,39 +173,43 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
                 setRevealedCellsCount(currentRevealedCount);
                 setMinesRemaining(getRemainingMines(processedBoard, newDifficultySettings.mines));
                 
-                // If not in review mode, determine if the loaded game state is already won or lost
                 if (!reviewMode) {
                     if (checkWinCondition(processedBoard, newDifficultySettings.rows, newDifficultySettings.cols, newDifficultySettings.mines)) {
                         setGameStatus('won');
-                        setIsGameResolvedByLoad(true); // Mark as resolved by load
+                        setIsGameResolvedByLoad(true); 
                     } else {
-                        // Check for loss condition (a mine is revealed and exploded)
                         const lost = processedBoard.some(row => row.some(cell => cell.isMine && cell.isRevealed && cell.exploded));
                         if (lost) {
                             setGameStatus('lost');
-                            setIsGameResolvedByLoad(true); // Mark as resolved by load
+                            setIsGameResolvedByLoad(true); 
                         } else {
-                           setGameStatus('playing'); // If not won or lost, it's in progress
+                           setGameStatus('playing'); 
                            setIsGameResolvedByLoad(false);
                         }
                     }
                 } else {
-                    setGameStatus('playing'); // In review, always 'playing' to show board
+                    setGameStatus('playing'); 
                 }
-                setFirstClick(false); // Game is loaded, so not the first click anymore
+                setFirstClick(false); 
             } else {
-                 console.warn("Parsed initialBoardState structure mismatch, falling back to new board.");
+                 console.warn("Parsed initialBoardState structure/dimensions mismatch, falling back to new board.");
+                 const fallbackBoard = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
+                 setBoard(fallbackBoard);
+                 setMinesRemaining(getRemainingMines(fallbackBoard, newDifficultySettings.mines));
                  if (!reviewMode) resetGameInternals(difficultyKey);
-                 else setBoard(createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols));
             }
         } catch (e) {
             console.error("Error processing initialBoardState, falling back to new board:", e);
+            const fallbackBoard = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
+            setBoard(fallbackBoard);
+            setMinesRemaining(getRemainingMines(fallbackBoard, newDifficultySettings.mines));
             if (!reviewMode) resetGameInternals(difficultyKey);
-            else setBoard(createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols));
         }
     } else {
+        const freshBoard = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
+        setBoard(freshBoard);
+        setMinesRemaining(getRemainingMines(freshBoard, newDifficultySettings.mines));
         if (!reviewMode) resetGameInternals(difficultyKey);
-        else setBoard(createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [difficultyKey, initialBoardState, reviewMode]); 
@@ -217,6 +227,14 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     }
     return () => clearInterval(timerId);
   }, [gameStatus, reviewMode, isGameResolvedByLoad]);
+  
+  // Effect to update minesRemaining when board changes (e.g. due to prop update in review mode)
+  useEffect(() => {
+    if (board && difficulty) { // Ensure board and difficulty are set
+        setMinesRemaining(getRemainingMines(board, difficulty.mines));
+    }
+  }, [board, difficulty]);
+
 
   const handleCellClick = (x: number, y: number) => {
     if (reviewMode || gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isFlagged || board[y][x].isRevealed) {
@@ -269,19 +287,14 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     
     let currentBoard = board; 
     if (gameStatus === 'ready' && firstClick) {
-        // Mines are not placed on flag action usually, but if it's the very first action on board.
-        // To maintain consistency with click, we can place mines here too.
-        // Or, defer mine placement until a reveal. For simplicity, let's keep it consistent:
-        // currentBoard = placeMines(board, difficulty.rows, difficulty.cols, difficulty.mines, x, y);
-        // setFirstClick(false);   
-        setGameStatus('playing'); // Set status to playing on first interaction
+        setGameStatus('playing'); 
     } else if (gameStatus === 'ready' && !firstClick) { 
         setGameStatus('playing');
     }
 
     const newBoardAfterFlag = toggleFlag(currentBoard, x, y);
     setBoard(newBoardAfterFlag);
-    setMinesRemaining(getRemainingMines(newBoardAfterFlag, difficulty.mines));
+    // setMinesRemaining will be updated by the useEffect watching `board`
 
     if (activeGameId && onMoveMade) {
       onMoveMade(newBoardAfterFlag[y][x].isFlagged ? "flag" : "unflag", x, y);
@@ -297,14 +310,14 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
   };
   
   const getGridStyle = () => {
-    let cellSize = "minmax(20px, 1fr)"; // Default for smaller boards
-    if (difficulty.cols <= 10 && difficulty.rows <=10) cellSize = "minmax(28px, 1fr)"; // Larger cells for easy
-    else if (difficulty.cols > 20 || difficulty.rows > 20) cellSize = "minmax(18px, 1fr)"; // Medium cells
-    if (difficulty.cols > 25 || difficulty.rows > 25) cellSize = "minmax(16px, 1fr)"; // Smaller for hard
+    let cellSize = "minmax(20px, 1fr)"; 
+    if (difficulty.cols <= 10 && difficulty.rows <=10) cellSize = "minmax(28px, 1fr)"; 
+    else if (difficulty.cols > 20 || difficulty.rows > 20) cellSize = "minmax(18px, 1fr)"; 
+    if (difficulty.cols > 25 || difficulty.rows > 25) cellSize = "minmax(16px, 1fr)"; 
 
     return {
       gridTemplateColumns: `repeat(${difficulty.cols}, ${cellSize})`,
-      maxWidth: `${difficulty.cols * 40}px`, // Max width constraint
+      maxWidth: `${difficulty.cols * 40}px`, 
     };
   };
 
@@ -314,7 +327,6 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     resetBoardToInitial: () => { 
         if (!reviewMode) {
             resetGameInternals(difficultyKey);
-            setTimeElapsed(0);
         }
     },
     calculateTimeFromStart: (startTime: Timestamp) => {
@@ -330,7 +342,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
       <div className="flex justify-between items-center w-full max-w-3xl mb-4 p-3 bg-card rounded-lg shadow">
         <div className="flex items-center text-lg font-semibold">
           <FlagIcon className="mr-2 h-5 w-5 text-red-500" />
-          <span className="text-foreground">{String(minesRemaining).padStart(3, '0')}</span>
+          <span className="text-foreground tabular-nums">{String(minesRemaining).padStart(3, '0')}</span>
         </div>
         <Button 
             variant="ghost" 
@@ -344,7 +356,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
         </Button>
         <div className="flex items-center text-lg font-semibold">
           <Timer className="mr-2 h-5 w-5 text-blue-500" />
-          <span className="text-foreground">{String(timeElapsed).padStart(3, '0')}</span>
+          <span className="text-foreground tabular-nums">{String(timeElapsed).padStart(3, '0')}</span>
         </div>
       </div>
 
@@ -381,9 +393,6 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => {
                 setShowDialog(false);
-                 if (onGameEnd && (gameStatus === 'won' || gameStatus === 'lost')) {
-                    // Parent (PlayPage) handles further actions based on onGameEnd callback.
-                 }
             }}>
               Close
             </AlertDialogCancel>
