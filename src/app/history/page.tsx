@@ -249,7 +249,12 @@ import React from 'react';
                     )}
                     {!gamesLoading && !gamesError && games.length > 0 && (
                         <ul className="divide-y divide-border">
-                            {games.map((game) => (
+                            {games
+                                .map(game => ({
+                                    ...game,
+                                    moves: game.moves?.filter(move => typeof move.action === 'string' && move.action !== '') || [] // Filter out moves with invalid actions
+                                }))
+                                .map((game) => (
                                 <li key={game.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 hover:bg-muted/50 transition-colors">
                                     <div className="flex items-center gap-3 mb-2 sm:mb-0">
                                         <GameStatusIcon result={game.result} />

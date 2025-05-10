@@ -74,7 +74,7 @@ export type FriendRequest = z.infer<typeof FriendRequestSchema>;
 export const FriendshipSchema = z.object({
   id: z.string(),
   users: z.array(z.string()).length(2, "Friendship must involve two users"),
-  createdAt: timestampSchema,
+  createdAt: timestampSchema.nullable().optional(), // Made nullable and optional
 });
 export type Friendship = z.infer<typeof FriendshipSchema>;
 
@@ -85,3 +85,4 @@ export const ProfilePreferencesSchema = z.object({
   avatar: z.string().url("Invalid avatar URL").optional().or(z.literal("")),
 });
 export type ProfilePreferences = z.infer<typeof ProfilePreferencesSchema>;
+
