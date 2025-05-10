@@ -16,9 +16,9 @@ export const UserSchema = z.object({
     avatar: z.string().optional(),
   }).nullable().optional(), // Made nullable and optional
   userFriendCode: z.string().length(10, "Friend code must be 10 characters").optional(),
-  friendCodes: z.array(z.string()).nullable().optional(), // Made nullable and optional
-  friendIds: z.array(z.string()).nullable().optional(), // Made nullable and optional
-  createdAt: timestampSchema.nullable().optional(), // Added as nullable and optional
+  // friendCodes array is deprecated, friendships are stored in 'friendships' collection
+  // friendIds array is deprecated, friendships are stored in 'friendships' collection
+  createdAt: timestampSchema.nullable().optional(), 
 });
 
 export type User = z.infer<typeof UserSchema>;
@@ -27,7 +27,7 @@ export type User = z.infer<typeof UserSchema>;
 // Game Move Entity (Sub-object within Game)
 export const MoveSchema = z.object({
   timestamp: timestampSchema,
-  action: z.string(), // e.g., "reveal", "flag"
+  action: z.string().catch(''), // If action is not a string or undefined, default to empty string
   x: z.number().int(),
   y: z.number().int(),
 });
@@ -65,7 +65,7 @@ export const FriendRequestSchema = z.object({
   status: FriendRequestStatusSchema,
   requesterFriendCode: z.string().optional(),
   recipientFriendCode: z.string().optional(),
-  createdAt: timestampSchema.nullable().optional(), // Added as nullable and optional
+  createdAt: timestampSchema.nullable().optional(), 
 });
 
 export type FriendRequest = z.infer<typeof FriendRequestSchema>;
@@ -74,7 +74,7 @@ export type FriendRequest = z.infer<typeof FriendRequestSchema>;
 export const FriendshipSchema = z.object({
   id: z.string(),
   users: z.array(z.string()).length(2, "Friendship must involve two users"),
-  createdAt: timestampSchema.nullable().optional(), // Made nullable and optional
+  createdAt: timestampSchema.nullable().optional(), 
 });
 export type Friendship = z.infer<typeof FriendshipSchema>;
 
@@ -85,4 +85,3 @@ export const ProfilePreferencesSchema = z.object({
   avatar: z.string().url("Invalid avatar URL").optional().or(z.literal("")),
 });
 export type ProfilePreferences = z.infer<typeof ProfilePreferencesSchema>;
-
