@@ -3,11 +3,11 @@
 
 import { useFirestoreDocument } from '@/hooks/useFirestoreDocument';
 import { GameSchema, type Game } from '@/lib/firebaseTypes';
-import type { BoardState } from '@/lib/minesweeper';
+import type { BoardState, CellState } from '@/lib/minesweeper'; // CellState import
 import { createInitialBoard, revealCell, toggleFlag, calculateAdjacentMines } from '@/lib/minesweeper';
 import { DIFFICULTY_LEVELS, type DifficultyKey } from '@/config/minesweeperSettings';
 import { useSearchParams } from 'next/navigation';
-import AppLayout from '@/components/layout/AppLayout'; // Make sure AppLayout is client component or wrapped
+import AppLayout from '@/components/layout/AppLayout'; 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -22,6 +22,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Suspense } from 'react';
 
 const nonJsonGameStates = [
   "INITIAL_BOARD_STATE",
@@ -32,7 +33,6 @@ const nonJsonGameStates = [
   "AUTO_QUIT_MULTIPLE_IN_PROGRESS",
 ];
 
-import { Suspense } from 'react';
 
 function GameReviewContent() {
   const searchParams = useSearchParams();
@@ -44,7 +44,7 @@ function GameReviewContent() {
     GameSchema
   );
 
-  const [currentMoveIndex, setCurrentMoveIndex] = React.useState<number>(0);
+  const [currentMoveIndex, setCurrentMoveIndex] = React.useState<number>(-1); // Start at -1 for initial board (Move 0)
   const [replayedBoardState, setReplayedBoardState] = React.useState<BoardState | null>(null);
   const [replayedTimeElapsed, setReplayedTimeElapsed] = React.useState<number>(0);
 
@@ -67,12 +67,11 @@ function GameReviewContent() {
     let targetBoard: BoardState;
     let targetTime: number = 0;
 
-    // Case 1: No moves to replay
+    // Case 1: No moves to replay (or game quit early)
     if (!game.moves || game.moves.length === 0) {
       if (game.gameState && !nonJsonGameStates.includes(game.gameState)) {
         try {
           targetBoard = JSON.parse(game.gameState) as BoardState;
-          // Ensure adjacency counts are present, re-calculate if necessary (though unlikely for final states)
           let needsRecalculate = targetBoard.some(row => row.some(cell => typeof cell.adjacentMines !== 'number'));
           if (needsRecalculate) {
             targetBoard = calculateAdjacentMines(targetBoard, difficultySettings.rows, difficultySettings.cols);
@@ -93,23 +92,21 @@ function GameReviewContent() {
     }
 
     // Case 2: Replay moves
-    // Step 1: Get the true mine locations and adjacency counts from the game's final state.
     let trueMinedBoard: BoardState | null = null;
     if (game.gameState && !nonJsonGameStates.includes(game.gameState)) {
       try {
         trueMinedBoard = JSON.parse(game.gameState) as BoardState;
       } catch (e) {
         console.error("Error parsing game.gameState for replay:", e);
-        setReplayedBoardState(createInitialBoard(difficultySettings.rows, difficultySettings.cols)); // Fallback
+        setReplayedBoardState(createInitialBoard(difficultySettings.rows, difficultySettings.cols));
         return;
       }
     } else {
       console.error("Cannot replay: game.gameState is not a valid board JSON for sourcing mine locations.");
-      setReplayedBoardState(createInitialBoard(difficultySettings.rows, difficultySettings.cols)); // Fallback
+      setReplayedBoardState(createInitialBoard(difficultySettings.rows, difficultySettings.cols));
       return;
     }
 
-    // Step 2: Create a fresh board, unrevealed, but with correct mine data and adjacentMines counts.
     targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
     for (let r = 0; r < difficultySettings.rows; r++) {
       for (let c = 0; c < difficultySettings.cols; c++) {
@@ -117,39 +114,37 @@ function GameReviewContent() {
           targetBoard[r][c].isMine = trueMinedBoard[r][c].isMine;
           targetBoard[r][c].adjacentMines = trueMinedBoard[r][c].adjacentMines;
         } else {
-          // This case should ideally not happen if trueMinedBoard is valid and matches difficulty
           console.warn(`Missing cell data in trueMinedBoard at ${r},${c}`);
         }
       }
     }
+    
+    targetTime = 0; // Default for initial state (currentMoveIndex === -1)
 
-    // Step 3: Apply moves up to currentMoveIndex
-    const effectiveMoveIndex = Math.min(currentMoveIndex, game.moves.length - 1);
-
-    for (let i = 0; i <= effectiveMoveIndex; i++) {
-      const move = game.moves[i];
-      if (move.action === 'reveal') {
-        const result = revealCell(targetBoard, difficultySettings.rows, difficultySettings.cols, move.x, move.y);
-        targetBoard = result.newBoard;
-        if (result.gameOver) {
-          // If this specific move caused game over, mark it as exploded
-          if (i === effectiveMoveIndex && targetBoard[move.y][move.x].isMine) {
-            targetBoard[move.y][move.x].exploded = true;
+    if (currentMoveIndex >= 0 && game.moves && currentMoveIndex < game.moves.length) {
+      for (let i = 0; i <= currentMoveIndex; i++) {
+        const move = game.moves[i];
+        if (move.action === 'reveal') {
+          const result = revealCell(targetBoard, difficultySettings.rows, difficultySettings.cols, move.x, move.y, 'playing', 0); // 'playing', 0 for mines assumes mines already set
+          targetBoard = result.newBoard;
+          if (result.gameOver && i === currentMoveIndex && targetBoard[move.y][move.x].isMine) {
+             targetBoard[move.y][move.x].exploded = true;
           }
-          // For review, we might want to continue applying subsequent flag moves, so don't break
+        } else if (move.action === 'flag' || move.action === 'unflag') {
+          targetBoard = toggleFlag(targetBoard, move.x, move.y);
         }
-      } else if (move.action === 'flag' || move.action === 'unflag') {
-        targetBoard = toggleFlag(targetBoard, move.x, move.y);
+        // Update time based on the *current* move being processed in the loop IF it's the last one to be applied
+        if (i === currentMoveIndex && move.timestamp && game.startTime) {
+            targetTime = Math.round((move.timestamp.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
+        }
       }
-      // Update time based on this move's timestamp
-      if (move.timestamp && game.startTime) {
-        targetTime = Math.round((move.timestamp.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
+      // Highlight the cell of the current actioned move
+      const currentActionedMove = game.moves[currentMoveIndex];
+      if (targetBoard[currentActionedMove.y] && targetBoard[currentActionedMove.y][currentActionedMove.x]) {
+        targetBoard[currentActionedMove.y][currentActionedMove.x].isReplayHighlight = true;
       }
     }
-     // If currentMoveIndex is -1 (before first move), targetTime should be 0.
-    // The loop for (let i=0; i <= effectiveMoveIndex) won't run if effectiveMoveIndex is -1.
-    // So targetTime remains 0, which is correct.
-    // If effectiveMoveIndex is >= 0, targetTime is set by the last move in the loop.
+    // if currentMoveIndex is -1, targetBoard is initial, targetTime is 0, no highlight.
 
     setReplayedBoardState(targetBoard);
     setReplayedTimeElapsed(targetTime);
@@ -207,7 +202,7 @@ function GameReviewContent() {
                     initialBoardState={JSON.stringify(replayedBoardState)}
                     initialTimeElapsed={replayedTimeElapsed}
                     reviewMode={true}
-                    isGuest={true}
+                    isGuest={true} // Or determine based on actual game data if available
                     activeGameId={game.id}
                   />
                 </div>
@@ -215,18 +210,20 @@ function GameReviewContent() {
                 {game.moves && game.moves.length > 0 && (
                   <div className="flex justify-center items-center space-x-4">
                     <Button
-                      onClick={() => setCurrentMoveIndex(prev => Math.max(0, prev - 1))}
-                      disabled={currentMoveIndex <= 0}
+                      onClick={() => setCurrentMoveIndex(prev => Math.max(-1, prev - 1))}
+                      disabled={currentMoveIndex <= -1}
                       variant="outline"
                     >
                       <ChevronLeft className="mr-2 h-4 w-4" /> Previous
                     </Button>
                     <span className="text-sm text-muted-foreground tabular-nums w-40 text-center">
-                      Move: {`${currentMoveIndex + 1} / ${game.moves.length}`}\
+                      {currentMoveIndex === -1
+                        ? `Initial Board (Move 0 / ${game.moves?.length || 0})`
+                        : `Move: ${currentMoveIndex + 1} / ${game.moves?.length || 0}`}
                     </span>
                     <Button
-                      onClick={() => setCurrentMoveIndex(prev => Math.min((game.moves ? game.moves.length : 0) - 1, prev + 1))}
-                      disabled={currentMoveIndex >= game.moves.length - 1}
+                      onClick={() => setCurrentMoveIndex(prev => Math.min((game.moves?.length || 0) - 1, prev + 1))}
+                      disabled={currentMoveIndex >= (game.moves?.length || 0) - 1}
                       variant="outline"
                     >
                       Next <ChevronRight className="ml-2 h-4 w-4" />
@@ -245,7 +242,7 @@ function GameReviewContent() {
                 </AlertDescription>
               </Alert>
             )}
-             {!replayedBoardState && (!game.moves || game.moves.length > 0) && (
+             {!replayedBoardState && game.moves && game.moves.length > 0 && (
                <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Loading Replay</AlertTitle>
@@ -256,7 +253,7 @@ function GameReviewContent() {
             )}
 
 
-            <Accordion type="single" collapsible className="w-full">
+            <Accordion type="single" collapsible className="w-full" defaultValue="game-details">
               <AccordionItem value="game-details">
                 <AccordionTrigger>Game Details</AccordionTrigger>
                 <AccordionContent className="space-y-2 pt-2">
@@ -286,8 +283,6 @@ function GameReviewContent() {
 }
 
 export default function GameReviewPage() {
-
-
   return (
     <AppLayout>
       <div className="container mx-auto p-4 md:p-8">

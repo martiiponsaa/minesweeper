@@ -9,6 +9,7 @@ export interface CellState {
   x: number;
   y: number;
   exploded?: boolean; // For showing the mine that was clicked
+  isReplayHighlight?: boolean; // For highlighting the current actioned cell in replay
 }
 
 export type BoardState = CellState[][];
@@ -27,6 +28,7 @@ export const createInitialBoard = (rows: number, cols: number, mines?: number): 
         adjacentMines: 0,
         x,
         y,
+        isReplayHighlight: false, // Initialize highlight state
       });
     }
     board.push(row);
@@ -109,6 +111,8 @@ export const revealCell = (
   minesToPlaceOnFirstClick: number
 ): { newBoard: BoardState; gameOver: boolean; cellsRevealedCount: number } => {
   let currentBoard = JSON.parse(JSON.stringify(board)); 
+  currentBoard.forEach((row: CellState[]) => row.forEach(cell => cell.isReplayHighlight = false)); // Clear previous highlights
+
   let gameOver = false;
   let cellsRevealedCount = 0;
 
@@ -162,7 +166,7 @@ export const revealCell = (
 
 
 export const toggleFlag = (board: BoardState, x: number, y: number): BoardState => {
-  const newBoard = board.map(row => row.map(cell => ({ ...cell })));
+  const newBoard = board.map(row => row.map(cell => ({ ...cell, isReplayHighlight: false }))); // Clear previous highlights
   if (!newBoard[y][x].isRevealed) {
     newBoard[y][x].isFlagged = !newBoard[y][x].isFlagged;
   }

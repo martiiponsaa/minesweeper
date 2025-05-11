@@ -50,13 +50,15 @@ const CellComponent: React.FC<CellProps> = ({ cell, onClick, onContextMenu }) =>
       onContextMenu={onContextMenu}
       disabled={cell.isRevealed && !cell.isMine} // Allow clicking revealed mine for visual effect if needed
       className={cn(
-        'w-full aspect-square flex items-center justify-center border border-border/50 transition-colors duration-100 text-xs sm:text-sm md:text-base',
-        cell.isRevealed
-          ? cell.isMine
-            ? cell.exploded ? 'bg-red-500/50' : 'bg-muted/70' // Exploded mine vs other revealed mines
-            : 'bg-muted/50 cursor-default'
-          : 'bg-muted-foreground/20 hover:bg-muted-foreground/30 cursor-pointer',
-        cell.isFlagged && !cell.isRevealed && 'bg-yellow-500/20 hover:bg-yellow-500/30'
+        'w-full aspect-square flex items-center justify-center border border-border/50 transition-colors duration-100 text-xs sm:text-sm md:text-base relative', // Added relative for z-index on ring
+        {
+          'bg-muted/50 cursor-default': cell.isRevealed && !cell.isMine && !cell.exploded,
+          'bg-muted/70': cell.isRevealed && cell.isMine && !cell.exploded,
+          'bg-red-500/50': cell.isRevealed && cell.isMine && cell.exploded,
+          'bg-muted-foreground/20 hover:bg-muted-foreground/30 cursor-pointer': !cell.isRevealed && !cell.isFlagged,
+          'bg-yellow-500/20 hover:bg-yellow-500/30': cell.isFlagged && !cell.isRevealed,
+          'ring-2 ring-green-500 ring-inset z-10': cell.isReplayHighlight, // Highlight style
+        }
       )}
       aria-label={`Cell at ${cell.x}, ${cell.y}. Status: ${cell.isRevealed ? (cell.isMine ? 'Mine' : `Revealed, ${cell.adjacentMines} mines`) : (cell.isFlagged ? 'Flagged' : 'Hidden')}`}
     >
