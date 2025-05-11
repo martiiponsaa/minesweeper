@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
@@ -10,7 +11,7 @@ import {
   checkWinCondition,
   getRemainingMines,
   calculateAdjacentMines, 
-  placeMines, // Import placeMines
+  // placeMines, // Import placeMines - This was commented out, kept as is
 } from '@/lib/minesweeper';
 import { DIFFICULTY_LEVELS, type DifficultyKey, type DifficultySetting } from '@/config/minesweeperSettings';
 import { Button } from '@/components/ui/button';
@@ -98,7 +99,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
       }
     }
     // For new games, review mode (which gets initialBoard later), or if parsing failed
-    return createInitialBoard(currentDifficultySettings.rows, currentDifficultySettings.cols);
+    return createInitialBoard(currentDifficultySettings.rows, currentDifficultySettings.cols, currentDifficultySettings.mines);
   });
 
   const [gameStatus, setGameStatus] = useState<GameStatus>(() => {
@@ -161,7 +162,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     if (reviewMode) return; 
     const newDifficultySettings = DIFFICULTY_LEVELS[newDifficultyKey];
     setDifficulty(newDifficultySettings);
-    const freshBoard = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols); 
+    const freshBoard = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols, newDifficultySettings.mines); 
     setBoard(freshBoard);
     setGameStatus('ready');
     setMinesRemaining(getRemainingMines(freshBoard, newDifficultySettings.mines)); 
@@ -199,12 +200,12 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
                 }
             } else {
                  console.warn("Review mode: initialBoardState dimensions mismatch, showing empty board.");
-                 boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
+                 boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols, newDifficultySettings.mines);
                  statusToSet = 'playing'; // Default for review
             }
         } catch (e) {
             console.error("Error parsing initialBoardState for review mode:", e);
-            boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
+            boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols, newDifficultySettings.mines);
             statusToSet = 'playing';
         }
     } else if (initialBoardState && !nonJsonGameStates.includes(initialBoardState) && !reviewMode) {
@@ -232,19 +233,19 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
                 }
             } else {
                  console.warn("Parsed initialBoardState structure/dimensions mismatch, falling back to new board for play mode.");
-                 boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
+                 boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols, newDifficultySettings.mines);
                  statusToSet = 'ready';
                  timeToSet = 0; 
             }
         } catch (e) {
             console.error("Error processing initialBoardState, falling back to new board for play mode:", e);
-            boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
+            boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols, newDifficultySettings.mines);
             statusToSet = 'ready';
             timeToSet = 0;
         }
     } else { 
         // New game or no initial state provided for play mode
-        boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
+        boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols, newDifficultySettings.mines);
         statusToSet = 'ready';
         timeToSet = 0; 
     }
@@ -286,30 +287,24 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
       return;
     }
     
-    let currentBoardForReveal = board.map(row => row.map(cell => ({...cell, isReplayHighlight: false, isReplayHighlightBad: false }))); // Clear previous highlights
-    let statusForReveal = gameStatus;
-
-    if(gameStatus === 'ready'){
-      // Mines are placed by revealCell if status is 'ready'
-      // The first click (reveal) should not be a mine.
-      currentBoardForReveal = placeMines(currentBoardForReveal, difficulty.rows, difficulty.cols, difficulty.mines, x, y);
-      currentBoardForReveal = calculateAdjacentMines(currentBoardForReveal, difficulty.rows, difficulty.cols);
-      statusForReveal = 'playing'; 
+    let currentStatus = gameStatus;
+    if (gameStatus === 'ready') {
+      currentStatus = 'playing';
       setGameStatus('playing'); 
     }
 
     const { newBoard, gameOver, cellsRevealedCount: newlyRevealed } = revealCell(
-        currentBoardForReveal, 
+        board,
         difficulty.rows, 
         difficulty.cols, 
         x, 
         y, 
-        statusForReveal, // Pass the potentially updated status ('playing')
+        currentStatus, // Pass the potentially updated status ('playing')
         difficulty.mines // This is relevant for the `placeMines` call within `revealCell` if status was 'ready'
     );
     
-    setBoard(newBoard);
-    
+    setBoard(newBoard); // Update board state immediately
+
     let currentTotalRevealedCount = 0;
     newBoard.forEach(row => row.forEach(cell => {
       if (cell.isRevealed && !cell.isMine) currentTotalRevealedCount++;
@@ -328,7 +323,6 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
             description: (
                 <>
                   You hit a mine. Better luck next time!
-                  {/* Time display moved out of here, shown dynamically */}
                 </>
             ), 
             icon: <Frown className="h-6 w-6 text-red-500" /> 
@@ -345,7 +339,6 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
             description: (
                 <>
                     You cleared the board!
-                     {/* Time display moved out of here, shown dynamically */}
                 </>
             ), 
             icon: <PartyPopper className="h-6 w-6 text-yellow-500" /> 
@@ -363,26 +356,11 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
       return;
     }
 
-    let finalBoardState: BoardState;
-    let boardForFlagging = board.map(row => row.map(cell => ({...cell, isReplayHighlight: false, isReplayHighlightBad: false })));
-
-
     if (gameStatus === 'ready') {
-        const currentDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
-        
-        // For a first flag, place mines randomly across the entire board.
-        // The safe zone concept is typically for the first *reveal*.
-        let initializedBoard = placeMines(boardForFlagging, currentDifficultySettings.rows, currentDifficultySettings.cols, currentDifficultySettings.mines); // No firstClickX/Y for safe zone
-        
-        initializedBoard = calculateAdjacentMines(initializedBoard, currentDifficultySettings.rows, currentDifficultySettings.cols);
-        
-        finalBoardState = toggleFlag(initializedBoard, x, y);
-        setGameStatus('playing'); 
-    } else {
-        // Game is already 'playing'
-        finalBoardState = toggleFlag(boardForFlagging, x, y);
+      setGameStatus('playing');
     }
 
+    const finalBoardState = toggleFlag(board, x, y);
     setBoard(finalBoardState);
     
     if (activeGameId && onMoveMade) {

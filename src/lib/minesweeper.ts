@@ -17,7 +17,7 @@ export type BoardState = CellState[][];
 
 export type GameStatus = 'ready' | 'playing' | 'won' | 'lost';
 
-export const createInitialBoard = (rows: number, cols: number, mines?: number): BoardState => { // Optional mines for initial creation
+export const createInitialBoard = (rows: number, cols: number, mines: number): BoardState => {
   const board: BoardState = [];
   for (let y = 0; y < rows; y++) {
     const row: CellState[] = [];
@@ -35,13 +35,24 @@ export const createInitialBoard = (rows: number, cols: number, mines?: number): 
     }
     board.push(row);
   }
-  // Mines are not placed here by default; they are placed on the first click for new games.
-  // Or, if `mines` is provided, it implies a pre-configured board (e.g., loading a game state).
-  // However, the standard `createInitialBoard` for a new game should just set up the grid.
-  return board;
+
+  let minesPlaced = 0;
+  while (minesPlaced < mines) {
+    const y = Math.floor(Math.random() * rows);
+    const x = Math.floor(Math.random() * cols);
+
+    if (!board[y][x].isMine) {
+      board[y][x].isMine = true;
+      minesPlaced++;
+    }
+  }
+
+  // After placing mines, calculate adjacent mine counts
+  return calculateAdjacentMines(board, rows, cols);
 };
 
-// Function to place mines, ensuring the first clicked cell and its neighbors are safe
+/*
+ Removed placeMines function as mines are now placed in createInitialBoard
 export const placeMines = (board: BoardState, rows: number, cols: number, minesToPlace: number, firstClickX?: number, firstClickY?: number): BoardState => {
   const newBoard = board.map(row => row.map(cell => ({ ...cell })));
   let minesPlaced = 0;
@@ -78,8 +89,9 @@ export const placeMines = (board: BoardState, rows: number, cols: number, minesT
       minesPlaced++;
     }
   }
-  return newBoard;
+  return board;
 };
+*/
 
 
 export const calculateAdjacentMines = (board: BoardState, rows: number, cols: number): BoardState => {
@@ -112,11 +124,9 @@ export const revealCell = (
   rows: number,
   cols: number,
   x: number,
-  y: number,
-  gameStatusForReveal: GameStatus,
-  minesToPlaceOnFirstClick: number
+  y: number
 ): { newBoard: BoardState; gameOver: boolean; cellsRevealedCount: number } => {
-  let currentBoard = JSON.parse(JSON.stringify(board)); 
+  let currentBoard = board.map(row => row.map(cell => ({ ...cell })));
   currentBoard.forEach((row: CellState[]) => row.forEach(cell => {
     cell.isReplayHighlight = false;
     cell.isReplayHighlightBad = false;
@@ -124,11 +134,6 @@ export const revealCell = (
 
   let gameOver = false;
   let cellsRevealedCount = 0;
-
-  if (gameStatusForReveal === 'ready') {
-    currentBoard = placeMines(currentBoard, rows, cols, minesToPlaceOnFirstClick, x, y);
-    currentBoard = calculateAdjacentMines(currentBoard, rows, cols);
-  }
 
   const reveal = (rx: number, ry: number) => {
     if (ry < 0 || ry >= rows || rx < 0 || rx >= cols || currentBoard[ry][rx].isRevealed || currentBoard[ry][rx].isFlagged) {

@@ -271,7 +271,7 @@ function GameReviewContent() {
             )}
 
 
-            <Accordion type="single" collapsible className="w-full" defaultValue="game-details">
+            <Accordion type="single" collapsible className="w-full">
               <AccordionItem value="game-details">
                 <AccordionTrigger>Game Details</AccordionTrigger>
                 <AccordionContent className="space-y-2 pt-2">
