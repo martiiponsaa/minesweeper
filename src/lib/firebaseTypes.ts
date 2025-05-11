@@ -27,7 +27,7 @@ export type User = z.infer<typeof UserSchema>;
 // Game Move Entity (Sub-object within Game)
 export const MoveSchema = z.object({
   timestamp: timestampSchema,
-  action: z.string().catch(''), // If action is not a string or undefined, default to empty string
+  action: z.string(), // Ensure action is always a string
   x: z.number().int(),
   y: z.number().int(),
 });

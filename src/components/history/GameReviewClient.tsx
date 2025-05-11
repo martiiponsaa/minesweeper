@@ -206,6 +206,7 @@ export default function GameReviewClient({ gameId }: { gameId: string | undefine
                 isGuest={!user} 
                 reviewMode={true}
                 initialTimeElapsed={gameDuration ?? 0} 
+                activeGameId={game.id}
               />
             ) : (
               <p className="text-muted-foreground text-center py-10">

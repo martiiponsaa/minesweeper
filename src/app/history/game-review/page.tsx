@@ -7,7 +7,7 @@ import type { BoardState } from '@/lib/minesweeper';
 import { createInitialBoard, revealCell, toggleFlag, calculateAdjacentMines } from '@/lib/minesweeper';
 import { DIFFICULTY_LEVELS, type DifficultyKey } from '@/config/minesweeperSettings';
 import { useSearchParams } from 'next/navigation';
-import AppLayout from '@/components/layout/AppLayout';
+import AppLayout from '@/components/layout/AppLayout'; // Make sure AppLayout is client component or wrapped
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -32,7 +32,9 @@ const nonJsonGameStates = [
   "AUTO_QUIT_MULTIPLE_IN_PROGRESS",
 ];
 
-export default function GameReviewPage() {
+import { Suspense } from 'react';
+
+function GameReviewContent() {
   const searchParams = useSearchParams();
   const gameId = searchParams.get('gameId');
 
@@ -155,6 +157,138 @@ export default function GameReviewPage() {
   }, [game, currentMoveIndex]);
 
   return (
+    <>
+      {loading && (
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-[200px] w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      )}
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>
+            Failed to load game data: {error.message}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!loading && !error && !game && (
+        <Alert variant="default">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Game Not Found</AlertTitle>
+          <AlertDescription>
+            No game found with the provided ID.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {game && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Game Review: {game.difficulty} - {game.result}
+            </CardTitle>
+            <CardDescription>
+              Review the board state and details of this completed game.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {replayedBoardState && (
+              <div className="flex flex-col items-center space-y-4">
+                <div className="w-full p-0 sm:p-2 md:p-4">
+                  <GameBoard
+                    difficultyKey={game.difficulty.toLowerCase() as DifficultyKey}
+                    initialBoardState={JSON.stringify(replayedBoardState)}
+                    initialTimeElapsed={replayedTimeElapsed}
+                    reviewMode={true}
+                    isGuest={true}
+                    activeGameId={game.id}
+                  />
+                </div>
+
+                {game.moves && game.moves.length > 0 && (
+                  <div className="flex justify-center items-center space-x-4">
+                    <Button
+                      onClick={() => setCurrentMoveIndex(prev => Math.max(0, prev - 1))}
+                      disabled={currentMoveIndex <= 0}
+                      variant="outline"
+                    >
+                      <ChevronLeft className="mr-2 h-4 w-4" /> Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground tabular-nums w-40 text-center">
+                      Move: {`${currentMoveIndex + 1} / ${game.moves.length}`}\
+                    </span>
+                    <Button
+                      onClick={() => setCurrentMoveIndex(prev => Math.min((game.moves ? game.moves.length : 0) - 1, prev + 1))}
+                      disabled={currentMoveIndex >= game.moves.length - 1}
+                      variant="outline"
+                    >
+                      Next <ChevronRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {game.moves && game.moves.length === 0 && (
+               <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>No Replay Available</AlertTitle>
+                <AlertDescription>
+                  No moves were recorded for this game. The final board state (if available) is shown.
+                </AlertDescription>
+              </Alert>
+            )}
+             {!replayedBoardState && (!game.moves || game.moves.length > 0) && (
+               <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Loading Replay</AlertTitle>
+                <AlertDescription>
+                  Board state is currently being reconstructed for replay.
+                </AlertDescription>
+              </Alert>
+            )}
+
+
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="game-details">
+                <AccordionTrigger>Game Details</AccordionTrigger>
+                <AccordionContent className="space-y-2 pt-2">
+                  <p><span className="font-semibold">Game ID:</span> {game.id}</p>
+                  <p><span className="font-semibold">Difficulty:</span> {game.difficulty}</p>
+                  <p><span className="font-semibold">Final Result:</span> {game.result}</p>
+                  {game.startTime && (
+                    <p><span className="font-semibold">Started:</span> {new Date(game.startTime.toDate()).toLocaleString()}</p>
+                  )}
+                  {game.endTime && (
+                    <p><span className="font-semibold">Ended:</span> {new Date(game.endTime.toDate()).toLocaleString()}</p>
+                  )}
+                  {(game.result === 'won' || game.result === 'lost' || game.result === 'quit') ? (
+                    game.endTime && game.startTime ? (
+                      <p><span className="font-semibold">Duration:</span> {Math.round((game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000)} seconds</p>
+                    ) : null
+                  ) : null}
+                   <p><span className="font-semibold">Total Moves:</span> {game.moves?.length || 0}</p>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </CardContent>
+        </Card>
+      )}
+    </>
+  )
+}
+
+export default function GameReviewPage() {
+
+
+  return (
     <AppLayout>
       <div className="container mx-auto p-4 md:p-8">
         <div className="mb-4">
@@ -166,129 +300,10 @@ export default function GameReviewPage() {
         </div>
         <h1 className="text-3xl font-bold text-foreground mb-8">Game Review</h1>
 
-        {loading && (
-          <div className="space-y-4">
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-6 w-32" />
-            <Skeleton className="h-[200px] w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        )}
+        <Suspense fallback={<div>Loading game review...</div>}>
+          <GameReviewContent />
+        </Suspense>
 
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>
-              Failed to load game data: {error.message}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {!loading && !error && !game && (
-          <Alert variant="default">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Game Not Found</AlertTitle>
-            <AlertDescription>
-              No game found with the provided ID.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {game && (
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                Game Review: {game.difficulty} - {game.result}
-              </CardTitle>
-              <CardDescription>
-                Review the board state and details of this completed game.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {replayedBoardState && (
-                <div className="flex flex-col items-center space-y-4">
-                  <div className="w-full p-0 sm:p-2 md:p-4">
-                    <GameBoard
-                      difficultyKey={game.difficulty.toLowerCase() as DifficultyKey}
-                      currentBoardState={JSON.stringify(replayedBoardState)}
-                      initialTimeElapsed={replayedTimeElapsed}
-                      reviewMode={true}
-                      isGuest={true} 
-                      activeGameId={game.id}
-                    />
-                  </div>
-
-                  {game.moves && game.moves.length > 0 && (
-                    <div className="flex justify-center items-center space-x-4">
-                      <Button
-                        onClick={() => setCurrentMoveIndex(prev => Math.max(0, prev - 1))}
-                        disabled={currentMoveIndex <= 0}
-                        variant="outline"
-                      >
-                        <ChevronLeft className="mr-2 h-4 w-4" /> Previous
-                      </Button>
-                      <span className="text-sm text-muted-foreground tabular-nums w-40 text-center">
-                        Move: {`${currentMoveIndex + 1} / ${game.moves.length}`}\
-                      </span>
-                      <Button
-                        onClick={() => setCurrentMoveIndex(prev => Math.min(game.moves.length - 1, prev + 1))}
-                        disabled={currentMoveIndex >= game.moves.length - 1}
-                        variant="outline"
-                      >
-                        Next <ChevronRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {game.moves && game.moves.length === 0 && (
-                 <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>No Replay Available</AlertTitle>
-                  <AlertDescription>
-                    No moves were recorded for this game. The final board state (if available) is shown.
-                  </AlertDescription>
-                </Alert>
-              )}
-               {!replayedBoardState && (!game.moves || game.moves.length > 0) && (
-                 <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Loading Replay</AlertTitle>
-                  <AlertDescription>
-                    Board state is currently being reconstructed for replay.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-
-              <Accordion type="single" collapsible className="w-full" defaultValue='game-details'>
-                <AccordionItem value="game-details">
-                  <AccordionTrigger>Game Details</AccordionTrigger>
-                  <AccordionContent className="space-y-2 pt-2">
-                    <p><span className="font-semibold">Game ID:</span> {game.id}</p>
-                    <p><span className="font-semibold">Difficulty:</span> {game.difficulty}</p>
-                    <p><span className="font-semibold">Final Result:</span> {game.result}</p>
-                    {game.startTime && (
-                      <p><span className="font-semibold">Started:</span> {new Date(game.startTime.toDate()).toLocaleString()}</p>
-                    )}
-                    {game.endTime && (
-                      <p><span className="font-semibold">Ended:</span> {new Date(game.endTime.toDate()).toLocaleString()}</p>
-                    )}
-                    {(game.result === 'won' || game.result === 'lost' || game.result === 'quit') ? (
-                      game.endTime && game.startTime ? (
-                        <p><span className="font-semibold">Duration:</span> {Math.round((game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000)} seconds</p>
-                      ) : null
-                    ) : null}
-                     <p><span className="font-semibold">Total Moves:</span> {game.moves?.length || 0}</p>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </AppLayout>
   );

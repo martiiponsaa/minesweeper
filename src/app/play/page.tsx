@@ -219,18 +219,20 @@ export default function PlayPage() {
 
   const handleMoveMade = useCallback(async (moveType: 'reveal' | 'flag' | 'unflag', x: number, y: number) => {
     if (!user || !activeGameIdRef.current || !firestore) {
-      console.warn("Attempted to log move without user, game ID, or firestore.");
+      console.warn("Attempted to log move without user, active game ID, or firestore.");
       return;
     }
 
     const gameDocRef = doc(firestore, 'games', activeGameIdRef.current);
     const move = {
       type: moveType,
+      action: moveType, // Add the action field
       x,
       y,
       timestamp: Timestamp.now(),
     };
 
+    // console.log("Saving move:", move); to debug
     try {
       await updateDoc(gameDocRef, {
         moves: arrayUnion(move),
