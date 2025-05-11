@@ -57,7 +57,9 @@ const CellComponent: React.FC<CellProps> = ({ cell, onClick, onContextMenu }) =>
           'bg-red-500/50': cell.isRevealed && cell.isMine && cell.exploded,
           'bg-muted-foreground/20 hover:bg-muted-foreground/30 cursor-pointer': !cell.isRevealed && !cell.isFlagged,
           'bg-yellow-500/20 hover:bg-yellow-500/30': cell.isFlagged && !cell.isRevealed,
-          'ring-2 ring-green-500 ring-inset z-10': cell.isReplayHighlight, // Highlight style
+          'ring-2 ring-inset z-10': cell.isReplayHighlight,
+          'ring-green-500': cell.isReplayHighlight && !cell.isReplayHighlightBad,
+          'ring-red-500': cell.isReplayHighlight && cell.isReplayHighlightBad,
         }
       )}
       aria-label={`Cell at ${cell.x}, ${cell.y}. Status: ${cell.isRevealed ? (cell.isMine ? 'Mine' : `Revealed, ${cell.adjacentMines} mines`) : (cell.isFlagged ? 'Flagged' : 'Hidden')}`}
@@ -68,3 +70,4 @@ const CellComponent: React.FC<CellProps> = ({ cell, onClick, onContextMenu }) =>
 };
 
 export default CellComponent;
+

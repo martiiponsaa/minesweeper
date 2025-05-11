@@ -118,6 +118,8 @@ function GameReviewContent() {
         }
       }
     }
+    // Ensure adjacent mines are calculated for the clean targetBoard based on trueMinedBoard's mines
+    targetBoard = calculateAdjacentMines(targetBoard, difficultySettings.rows, difficultySettings.cols);
     
     targetTime = 0; // Default for initial state (currentMoveIndex === -1)
 
@@ -142,6 +144,22 @@ function GameReviewContent() {
       const currentActionedMove = game.moves[currentMoveIndex];
       if (targetBoard[currentActionedMove.y] && targetBoard[currentActionedMove.y][currentActionedMove.x]) {
         targetBoard[currentActionedMove.y][currentActionedMove.x].isReplayHighlight = true;
+        
+        // Determine if the move was bad
+        let isBadMove = false;
+        const cellAtMove = targetBoard[currentActionedMove.y][currentActionedMove.x];
+        const originalCellAtMove = trueMinedBoard[currentActionedMove.y]?.[currentActionedMove.x];
+
+
+        if (currentActionedMove.action === 'reveal' && originalCellAtMove?.isMine) {
+          isBadMove = true; // Clicked a mine
+        } else if (currentActionedMove.action === 'flag' && !originalCellAtMove?.isMine) {
+          isBadMove = true; // Flagged a non-mine
+        }
+        // Note: Unflagging a correctly flagged mine isn't inherently "bad" in the same way,
+        // and unflagging a non-mine is generally good or neutral.
+
+        targetBoard[currentActionedMove.y][currentActionedMove.x].isReplayHighlightBad = isBadMove;
       }
     }
     // if currentMoveIndex is -1, targetBoard is initial, targetTime is 0, no highlight.
@@ -303,3 +321,4 @@ export default function GameReviewPage() {
     </AppLayout>
   );
 }
+
