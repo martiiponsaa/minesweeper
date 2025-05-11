@@ -42,26 +42,30 @@ export const createInitialBoard = (rows: number, cols: number, mines?: number): 
 };
 
 // Function to place mines, ensuring the first clicked cell and its neighbors are safe
-export const placeMines = (board: BoardState, rows: number, cols: number, minesToPlace: number, firstClickX: number, firstClickY: number): BoardState => {
+export const placeMines = (board: BoardState, rows: number, cols: number, minesToPlace: number, firstClickX?: number, firstClickY?: number): BoardState => {
   const newBoard = board.map(row => row.map(cell => ({ ...cell })));
   let minesPlaced = 0;
   const safeZone = new Set<string>();
 
-  // Define the first click and its adjacent cells as safe
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      const ny = firstClickY + dy;
-      const nx = firstClickX + dx;
-      if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
-        safeZone.add(`${nx}-${ny}`);
+  // Define the first click and its adjacent cells as safe if firstClickX/Y are provided
+  if (firstClickX !== undefined && firstClickY !== undefined) {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const ny = firstClickY + dy;
+        const nx = firstClickX + dx;
+        if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
+          safeZone.add(`${nx}-${ny}`);
+        }
       }
     }
   }
 
+
   // Safety check: if minesToPlace is too high for the available cells after excluding safe zone
-  if (minesToPlace > (rows * cols) - safeZone.size) {
-      console.warn("Too many mines for the board size and safe zone. Adjusting mine count.");
-      minesToPlace = Math.max(0, (rows * cols) - safeZone.size);
+  const availableCellsForMines = (rows * cols) - safeZone.size;
+  if (minesToPlace > availableCellsForMines) {
+      console.warn(`Too many mines (${minesToPlace}) for the available cells (${availableCellsForMines}) after considering safe zone. Adjusting mine count to ${availableCellsForMines}.`);
+      minesToPlace = Math.max(0, availableCellsForMines);
   }
 
 
@@ -134,9 +138,9 @@ export const revealCell = (
     currentBoard[ry][rx].isRevealed = true;
     
     if (currentBoard[ry][rx].isMine) {
-      currentBoard[ry][rx].exploded = true;
+      currentBoard[ry][rx].exploded = true; // Mark the clicked mine as exploded
       gameOver = true;
-      return;
+      return; // Stop recursion for this path
     }
     
     cellsRevealedCount++;
@@ -154,17 +158,23 @@ export const revealCell = (
   reveal(x, y);
 
   if (gameOver) {
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (currentBoard[r][c].isMine && !currentBoard[r][c].isFlagged) { // Only reveal unflagged mines or incorrectly flagged cells
-          currentBoard[r][c].isRevealed = true;
-        } else if (!currentBoard[r][c].isMine && currentBoard[r][c].isFlagged) {
-          // Optional: Mark incorrectly flagged cells
-          // currentBoard[r][c].isRevealed = true; // Or add a specific state for "incorrectlyFlagged"
+    // When the game is over (a mine was clicked), reveal all other mines.
+    // The mine that was clicked is already marked as isRevealed = true and exploded = true.
+    for (let r_idx = 0; r_idx < rows; r_idx++) {
+      for (let c_idx = 0; c_idx < cols; c_idx++) {
+        if (currentBoard[r_idx][c_idx].isMine) {
+          currentBoard[r_idx][c_idx].isRevealed = true;
+          // Note: only the clicked mine gets `exploded = true`. Other mines just get `isRevealed = true`.
         }
+        // Optional: If a cell was flagged but it's NOT a mine, you might want to reveal it
+        // to show the player their mistake.
+        // else if (currentBoard[r_idx][c_idx].isFlagged && !currentBoard[r_idx][c_idx].isMine) {
+        //   currentBoard[r_idx][c_idx].isRevealed = true; // This would show its number or be blank
+        // }
       }
     }
   }
+
 
   return { newBoard: currentBoard, gameOver, cellsRevealedCount };
 };
