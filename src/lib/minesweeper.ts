@@ -155,7 +155,7 @@ export const revealCell = (
   y: number
 ): { newBoard: BoardState; gameOver: boolean; cellsRevealedCount: number } => {
   let currentBoard = board.map(row => row.map(cell => ({ ...cell })));
-  currentBoard.forEach((row: CellState[]) => row.forEach(cell => {
+  currentBoard.forEach((row: CellState[]) => row.forEach(cell => { // Reset replay highlights
     cell.isReplayHighlight = false;
     cell.isReplayHighlightBad = false;
   }));
@@ -170,13 +170,13 @@ export const revealCell = (
 
     currentBoard[ry][rx].isRevealed = true;
     
-    if (currentBoard[ry][rx].isMine) {
-      currentBoard[ry][rx].exploded = true;
-      gameOver = true;
-      return; 
+    if (currentBoard[ry][rx].isMine) { // Check if the currently revealed cell is a mine
+      currentBoard[ry][rx].exploded = true; // Mark this specific mine as exploded
+      gameOver = true; // Set game over flag
+      return; // Stop revealing further if a mine is hit
     }
     
-    cellsRevealedCount++;
+    cellsRevealedCount++; // Increment only for non-mine cells
 
     if (currentBoard[ry][rx].adjacentMines === 0) {
       for (let dy = -1; dy <= 1; dy++) {
@@ -188,16 +188,20 @@ export const revealCell = (
     }
   };
 
-  revealRecursiveInternal(x, y);
+  revealRecursiveInternal(x, y); // Initial call to start the reveal process
 
+  // After the reveal attempt, check if the game is over
   if (gameOver) {
-    for (let r_idx = 0; r_idx < rows; r_idx++) {
-      for (let c_idx = 0; c_idx < cols; c_idx++) {
-        if (currentBoard[r_idx][c_idx].isMine) {
-          currentBoard[r_idx][c_idx].isRevealed = true;
-        }
+    // If a mine was clicked (gameOver is true), iterate through the entire board
+    // to reveal all mines.
+    currentBoard = currentBoard.map(row => row.map(cell => {
+      if (cell.isMine) {
+        // Reveal all mines. The one that was clicked already has `exploded: true`.
+        // Other mines will be revealed without `exploded: true`.
+        return { ...cell, isRevealed: true };
       }
-    }
+      return cell;
+    }));
   }
 
   return { newBoard: currentBoard, gameOver, cellsRevealedCount };
@@ -236,3 +240,4 @@ export const getRemainingMines = (board: BoardState, totalMines: number): number
   }));
   return totalMines - flagsPlaced;
 };
+
