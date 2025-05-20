@@ -65,7 +65,12 @@ export default function DashboardPage() {
             Welcome, {user?.displayName || user?.email || 'Guest'}!
           </h1>
            {user ? (
-             <Button onClick={() => router.push('/api/auth/signout')} variant="outline">Logout</Button> // Updated signout
+             // Add the handleSignOut function within DashboardPageContent
+             (() => {
+               const { signOut } = useAuth(); // Get signOut from useAuth
+               const handleSignOut = async () => { await signOut(); router.push('/'); }; // Define handleSignOut
+               return <Button onClick={handleSignOut} variant="outline">Logout</Button>;
+             })()
            ) : (
              <Button onClick={() => router.push('/login')} variant="outline">Login</Button>
            )}
