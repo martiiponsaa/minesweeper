@@ -7,7 +7,7 @@
  import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
  import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
  import { Separator } from '@/components/ui/separator';
- import { UserPlus, Check, X, Users, Eye, Hourglass } from 'lucide-react'; 
+ import { UserPlus, Check, X, Users, Eye, Hourglass, Trash2 } from 'lucide-react'; 
  import { useState, useEffect } from 'react';
  import { useRouter } from 'next/navigation';
  import { useFirestoreDocument } from '@/hooks/useFirestoreDocument';
@@ -17,9 +17,10 @@
  import { doc, updateDoc, query, where, getDocs, collection, writeBatch, serverTimestamp, setDoc, limit } from 'firebase/firestore';
  import { useToast } from '@/hooks/use-toast';
  import { FriendRequestSchema, type FriendRequest, FriendshipSchema, type Friendship } from '@/lib/firebaseTypes';
- import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'; 
  import { generateRandomFriendCode } from '@/lib/utils';
 
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
  export default function FriendsPage() {
     const { user } = useAuth();
     const { firestore } = getFirebase();
@@ -111,6 +112,7 @@
                 where('recipientFriendCode', '==', friendCodeToAdd),
                 where('status', '==', 'pending')
             );
+            
             const existingRequestQuery2 = query(collection(firestore, 'friendRequests'),
                 where('recipientId', '==', user.uid),
                 where('requesterFriendCode', '==', friendCodeToAdd),
@@ -177,6 +179,34 @@
         }
     };
 
+    const deleteUser = async (friendId: string) => {
+        if (!user || !firestore) {
+            toast({ title: "Error", description: "Cannot delete friend. Ensure you are logged in.", variant: "destructive" });
+            return;
+        }
+
+        try {
+            // Find the friendship document
+            const friendshipQuery = query(
+                collection(firestore, 'friendships'),
+                where('users', 'array-contains-any', [user.uid, friendId])
+            );
+            const snapshot = await getDocs(friendshipQuery);
+            
+            if (!snapshot.empty) {
+                const batch = writeBatch(firestore);
+                // Assuming there's only one friendship document between two users
+                batch.delete(snapshot.docs[0].ref);
+                await batch.commit();
+                toast({ title: "Friend Removed", description: "The friendship has been removed." });
+                // You might want to refetch the friends list here
+            }
+        } catch (error) {
+            console.error("Error deleting friend:", error);
+            toast({ title: "Error", description: "Could not remove friend.", variant: "destructive" });
+        }
+    };
+
     const handleFriendRequest = async (request: FriendRequest, action: 'accept' | 'reject') => {
         if (!user || !firestore || processingRequestId === request.id) {
             return;
@@ -188,7 +218,7 @@
         try {
             if (action === 'accept') {
                 const batch = writeBatch(firestore);
-                batch.update(requestDocRef, { status: 'accepted' });
+                batch.delete(requestDocRef);
 
                 // Create a new document in the 'friendships' collection
                 const newFriendshipRef = doc(collection(firestore, 'friendships'));
@@ -200,7 +230,10 @@
                 await batch.commit();
                 toast({ title: "Friend Added", description: "You are now friends!" });
             } else { 
-                await updateDoc(requestDocRef, { status: 'rejected' });
+                const batch = writeBatch(firestore);
+                batch.delete(requestDocRef);
+                await batch.commit();
+                
                 toast({ title: "Request Rejected", description: "Friend request has been rejected." });
             }
             refetchIncomingRequests(); 
@@ -271,9 +304,30 @@
                                          <p className="text-xs text-muted-foreground">@{friend.username || friend.userFriendCode}</p>
                                        </div>
                                     </div>
-                                    <Button variant="outline" size="sm" onClick={() => router.push(`/profile/${friend.id}`)} title="View Friend's Profile">
-                                        <Eye className="mr-1 h-4 w-4" /> Profile
-                                    </Button>
+                                   <div className="flex items-center gap-2">
+                                        <Button variant="outline" size="sm" onClick={() => router.push(`/profile?id=${friend.id}`)} title="View Friend's Profile">
+                                            <Eye className="mr-1 h-4 w-4" /> Profile
+                                        </Button>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="destructive" size="sm" title="Delete Friend">
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Are you sure you want to remove {friend.profilePreferences?.displayName || friend.username || 'this friend'}?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        This action cannot be undone. This will permanently remove {friend.profilePreferences?.displayName || friend.username || 'this friend'} from your friends list.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={() => deleteUser(friend.id)}>Continue</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                   </div>
                                   </li>
                                 ))}
                              </ul>

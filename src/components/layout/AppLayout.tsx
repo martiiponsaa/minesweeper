@@ -89,26 +89,34 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                </SidebarMenuButton>
              </SidebarMenuItem>
              <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === '/history'} tooltip="History">
-                 <Link href="/history">
-                   <History />
+ <SidebarMenuButton asChild isActive={pathname === '/history'} tooltip="History" className={!user ? 'text-gray-400 pointer-events-none' : 'text-foreground data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground'}>
+                 <Link href={user ? `/history?id=${user.uid}` : "/history"}>
+ <History />
                   <span>History</span>
                  </Link>
                </SidebarMenuButton>
              </SidebarMenuItem>
              <SidebarMenuItem>
-               <SidebarMenuButton asChild isActive={pathname === '/stats'} tooltip="Statistics">
-                 <Link href="/stats">
-                   <BarChart3 />
+ <SidebarMenuButton asChild isActive={pathname === '/stats'} tooltip="Statistics" className={!user ? 'text-gray-400 pointer-events-none' : 'text-foreground data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground'}>
+                 <Link href={user ? `/stats?id=${user.uid}` : "/stats"}>
+ <BarChart3 />
                   <span>Stats</span>
                  </Link>
                </SidebarMenuButton>
              </SidebarMenuItem>
               <SidebarMenuItem>
-               <SidebarMenuButton asChild isActive={pathname === '/friends'} tooltip="Friends">
+ <SidebarMenuButton asChild isActive={pathname === '/friends'} tooltip="Friends" className={!user ? 'text-gray-400 pointer-events-none' : 'text-foreground data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground'}>
                  <Link href="/friends">
                    <Users />
                   <span>Friends</span>
+                 </Link>
+               </SidebarMenuButton>
+             </SidebarMenuItem>
+             <SidebarMenuItem>
+ <SidebarMenuButton asChild isActive={pathname === '/profile'} tooltip="Profile Settings" className={!user ? 'text-gray-400 pointer-events-none' : 'text-foreground data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground'}>
+                 <Link href={user ? `/profile?id=${user.uid}` : "/profile"}>
+                   <Settings />
+                   <span>Settings</span>
                  </Link>
                </SidebarMenuButton>
              </SidebarMenuItem>
@@ -120,28 +128,11 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
         <SidebarFooter className="p-2">
            <SidebarMenu>
              <SidebarMenuItem>
-               <SidebarMenuButton asChild isActive={pathname === '/profile'} tooltip="Profile Settings">
-                <Link href="/profile">
-                   <Settings />
-                   <span>Settings</span>
-                 </Link>
-               </SidebarMenuButton>
-             </SidebarMenuItem>
-             {user ? ( // Show Logout only if user is logged in
-               <SidebarMenuItem>
                  <SidebarMenuButton onClick={handleSignOut} tooltip="Logout">
                    <LogOut />
                    <span>Logout</span>
                  </SidebarMenuButton>
                </SidebarMenuItem>
-             ) : ( // Show Login if user is not logged in (guest mode)
-               <SidebarMenuItem>
-                 <SidebarMenuButton onClick={() => router.push('/login')} tooltip="Login">
-                   <LogIn />
-                   <span>Login</span>
-                 </SidebarMenuButton>
-               </SidebarMenuItem>
-             )}
            </SidebarMenu>
          </SidebarFooter>
       </Sidebar>
@@ -177,7 +168,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                                 </div>
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => router.push('/profile')}>
+                            <DropdownMenuItem onClick={() => router.push(`/profile?id=${user.uid}`)}>
                                 <Settings className="mr-2 h-4 w-4" />
                                 <span>Settings</span>
                             </DropdownMenuItem>
@@ -188,7 +179,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                 ) : ( // If user is not logged in (guest mode), show Register button
+                 ) : ( 
                    <Button variant="outline" onClick={() => router.push('/register')}>
                      <UserPlus className="mr-2 h-4 w-4" />
                      Register

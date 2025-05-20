@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import type { Timestamp } from 'firebase/firestore';
-
+import { useRouter } from 'next/navigation';
 
 export type InternalGameStatus = 'won' | 'lost' | 'quit';
 
@@ -70,6 +70,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
   activeGameId, 
   onMoveMade, 
 }, ref) => {
+  const router = useRouter();
   const [difficulty, setDifficulty] = useState<DifficultySetting>(DIFFICULTY_LEVELS[difficultyKey]);
   
   const [board, setBoard] = useState<BoardState>(() => {
@@ -273,7 +274,14 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
 
   const handleCellClick = (x: number, y: number) => {
-    if (reviewMode || gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isFlagged || board[y][x].isRevealed) {
+    const isControlClick = (window.event as MouseEvent)?.ctrlKey;
+    
+    if (gameStatus === 'lost' || gameStatus === 'won' || reviewMode) {
+      return; // Prevent clicks if game is over or in review mode
+    }
+
+    if (isControlClick) {
+ handleCellContextMenu({ preventDefault: () => {} } as React.MouseEvent, x, y); // Simulate right-click for flag/unflag
       return;
     }
     
@@ -354,8 +362,8 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
   const handleCellContextMenu = (e: React.MouseEvent, x: number, y: number) => {
     e.preventDefault();
-    if (reviewMode || gameStatus === 'lost' || gameStatus === 'won' || board[y][x].isRevealed) {
-      return;
+    if (gameStatus === 'lost' || gameStatus === 'won' || reviewMode) {
+      return; // Prevent actions if game is over or in review mode
     }
 
     // Allow flagging even if gameStatus is 'ready', then transition to 'playing'
@@ -494,6 +502,12 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
             }}>
               Close
             </AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              setShowDialog(false); 
+              router.push(`/history/game-review?gameId=${activeGameId}`);
+            }}>
+              Review
+            </AlertDialogAction>
             <AlertDialogAction onClick={() => {
               setShowDialog(false); 
               resetGameInternals(difficultyKey); 

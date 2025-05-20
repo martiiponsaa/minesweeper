@@ -90,7 +90,7 @@ export default function DashboardPage() {
               <p className="text-muted-foreground mb-4">
                 {user ? "Review your past games and performance." : "Register to save and review your game history."}
               </p>
-              <Button variant="secondary" className="w-full" onClick={() => router.push(user ? '/history' : '/register')}>
+              <Button className={`w-full ${user ? 'bg-primary hover:bg-primary/90' : ''}`} variant={user ? 'default' : 'secondary'} onClick={() => router.push(user ? `/history?id=${user.uid}` : '/register')} disabled={!user}>
                 {user ? "View History" : "Register to View History"}
               </Button>
             </CardContent>
@@ -104,7 +104,7 @@ export default function DashboardPage() {
                <p className="text-muted-foreground mb-4">
                  {user ? "Connect with friends and compare stats." : "Register to connect with friends."}
                </p>
-               <Button variant="secondary" className="w-full" onClick={() => router.push(user ? '/friends' : '/register')}>
+               <Button className={`w-full ${user ? 'bg-primary hover:bg-primary/90' : ''}`} variant={user ? 'default' : 'secondary'} onClick={() => router.push(user ? '/friends' : '/register')} disabled={!user}>
                  {user ? "Manage Friends" : "Register for Friends"}
                </Button>
              </CardContent>
@@ -118,7 +118,7 @@ export default function DashboardPage() {
               <p className="text-muted-foreground mb-4">
                 {user ? "Manage your account settings and preferences." : "Register to create a profile."}
               </p>
-              <Button variant="secondary" className="w-full" onClick={() => router.push(user ? '/profile' : '/register')}>
+              <Button className={`w-full ${user ? 'bg-primary hover:bg-primary/90' : ''}`} variant={user ? 'default' : 'secondary'} onClick={() => router.push(user ? `/profile?id=${user.uid}` : '/register')} disabled={!user}>
                 {user ? "Edit Profile" : "Register for Profile"}
               </Button>
             </CardContent>
@@ -162,7 +162,7 @@ export default function DashboardPage() {
               ) : (
                  <p className="text-muted-foreground mb-4">No games played yet. Play some to see your stats!</p>
               )}
-              <Button variant="secondary" className="w-full mt-4" onClick={() => router.push(user ? '/stats' : '/register')}>
+              <Button className={`w-full mt-4 ${user ? 'bg-primary hover:bg-primary/90' : ''}`} variant={user ? 'default' : 'secondary'} onClick={() => router.push(user ? `/stats?id=${user.uid}` : '/register')} disabled={!user}>
                 {user ? "View All Stats" : "Register for Stats"}
               </Button>
             </CardContent>

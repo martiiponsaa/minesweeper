@@ -194,12 +194,7 @@ export const revealCell = (
   if (gameOver) {
     // If a mine was clicked (gameOver is true), iterate through the entire board
     // to reveal all mines.
-    currentBoard = currentBoard.map(row => row.map(cell => {
-      if (cell.isMine) {
-        // Reveal all mines. The one that was clicked already has `exploded: true`.
-        // Other mines will be revealed without `exploded: true`.
-        return { ...cell, isRevealed: true };
-      }
+    currentBoard = currentBoard.map(row => row.map(cell => { 
       return cell;
     }));
   }

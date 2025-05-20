@@ -13,7 +13,9 @@ export const UserSchema = z.object({
   email: z.string().email().nullable().optional(),
   profilePreferences: z.object({
     displayName: z.string().optional(),
-    avatar: z.string().optional(),
+    avatar: z.string().optional().or(z.literal("")), // Allows empty string for avatar
+    allowStatsVisibility: z.boolean().optional(), // New field for stats visibility
+    allowHistoryVisibility: z.boolean().optional(), // New field for history visibility
   }).nullable().optional(), // Made nullable and optional
   userFriendCode: z.string().length(10, "Friend code must be 10 characters").optional(),
   // friendCodes array is deprecated, friendships are stored in 'friendships' collection
@@ -35,7 +37,7 @@ export const MoveSchema = z.object({
 export type Move = z.infer<typeof MoveSchema>;
 
 // Game Result Schema and Type
-export const GameResultSchema = z.enum(['won', 'lost', 'in-progress', 'quit']);
+export const GameResultSchema = z.enum(['won', 'lost', 'in-progress', 'quit', 'continue']);
 export type GameResult = z.infer<typeof GameResultSchema>;
 
 // Game Entity
@@ -83,5 +85,7 @@ export type Friendship = z.infer<typeof FriendshipSchema>;
 export const ProfilePreferencesSchema = z.object({
   displayName: z.string().min(1, "Display name cannot be empty").optional(),
   avatar: z.string().url("Invalid avatar URL").optional().or(z.literal("")),
+  allowStatsVisibility: z.boolean().optional(),
+  allowHistoryVisibility: z.boolean().optional(),
 });
 export type ProfilePreferences = z.infer<typeof ProfilePreferencesSchema>;

@@ -30,15 +30,16 @@ const CellComponent: React.FC<CellProps> = ({ cell, onClick, onContextMenu }) =>
   const renderContent = () => {
     if (cell.isRevealed) {
       if (cell.isMine) {
-        return <Bomb className={cn("h-4 w-4 sm:h-5 sm:w-5", cell.exploded ? "text-red-700" : "text-foreground")} />;
+        return <Bomb className={cn("h-full w-full p-[3px] object-contain text-red-500")} />;
       }
       if (cell.adjacentMines > 0) {
-        return <span className={cn("font-bold", getNumberColorClass(cell.adjacentMines))}>{cell.adjacentMines}</span>;
+        return <span className={cn("font-bold flex items-center justify-center h-full w-full p-[3px] text-lg sm:text-xl md:text-2xl", getNumberColorClass(cell.adjacentMines))}>{cell.adjacentMines}</span>;
       }
       return null; // Empty revealed cell
     }
     if (cell.isFlagged) {
-      return <Flag className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />;
+      // Use 'size-full' and 'p-1' for scaling icons within the cell
+      return <Flag className="h-full w-full p-[3px] object-contain text-red-500" />;
     }
     return null; // Hidden cell
   };
