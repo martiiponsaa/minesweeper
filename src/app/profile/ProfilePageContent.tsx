@@ -25,6 +25,7 @@ import { updateProfile as updateAuthProfile } from 'firebase/auth'; // Import fo
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
 import { UserCog } from 'lucide-react';
 
 const UserProfileFormSchema = ProfilePreferencesSchema.extend({
@@ -42,6 +43,9 @@ export default function ProfilePageContent() {
   const searchParams = useSearchParams();
   const userIdFromUrl = searchParams.get('id');
   const router = useRouter();
+
+  // Determine if the profile being viewed is the logged-in user's profile
+  const isOwnProfile = !userIdFromUrl || userIdFromUrl === user?.uid;
 
   const targetUserId = userIdFromUrl && user?.uid === userIdFromUrl ? user?.uid : undefined; // Only fetch if viewing own profile
 
@@ -415,6 +419,12 @@ export default function ProfilePageContent() {
  </FormItem>
  )}
                 />
+
+
+                {/* Text label for Theme Toggle */}
+                {/* Using Label for consistent styling with other labels */}
+                <Label>Change Theme: </Label>
+                <ThemeToggle />
 
                  <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>

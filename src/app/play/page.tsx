@@ -185,6 +185,20 @@ export default function PlayPage() {
           console.error("Error marking previous game as quit on new game start:", error);
       }
     } */
+   /* try {
+        const gamesCollectionRef = collection(firestore, 'games');
+        const q = query(gamesCollectionRef, where('userId', '==', user.uid), where('result', '==', 'in-progress'));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+            const batch = writeBatch(firestore);
+            querySnapshot.forEach((gameDoc) => {
+                batch.update(gameDoc.ref, { result: 'quit', endTime: Timestamp.now(), gameState: "AUTO_QUIT_MULTIPLE_IN_PROGRESS" });
+            });
+            await batch.commit();
+        }
+    } catch (error) {
+        console.error("Error clearing other in-progress games on new game start:", error);
+    } */
     
     setShowBoard(true);
     setGameKey(prevKey => prevKey + 1); 
@@ -204,37 +218,21 @@ export default function PlayPage() {
       setIsSavingOrStarting(false);
       return;
     }
-    
-    /* try {
-        const gamesCollectionRef = collection(firestore, 'games');
-        const q = query(gamesCollectionRef, where('userId', '==', user.uid), where('result', '==', 'in-progress'));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-            const batch = writeBatch(firestore);
-            querySnapshot.forEach((gameDoc) => {
-                batch.update(gameDoc.ref, { result: 'quit', endTime: Timestamp.now(), gameState: "AUTO_QUIT_MULTIPLE_IN_PROGRESS" });
-            });
-            await batch.commit();
-        }
-    } catch (error) {
-        console.error("Error clearing other in-progress games on new game start:", error);
-    } */
 
     const newGameDocRef = doc(collection(firestore, 'games'));
     setActiveGameId(newGameDocRef.id);
-
     const newGameEntry: Omit<Game, 'id'> & {id: string} = {
       id: newGameDocRef.id,
       userId: user.uid,
       startTime: Timestamp.now(),
       endTime: null,
       gameState: "INITIAL_BOARD_STATE",
-      difficulty: DIFFICULTY_LEVELS[selectedDifficultyKey].name,
+      difficulty: selectedNewGameDifficulty,
       moves: [],
       result: 'in-progress',
     };
     setGameData(newGameEntry); 
-
+    
     try {
       // Firestore setDoc expects data without the id field for the document data part
       const { id, ...gameDataForFirestore } = newGameEntry;
@@ -572,13 +570,13 @@ export default function PlayPage() {
                 <RotateCcw className="mr-2 h-4 w-4" /> Restart
               </Button>
               
-              <Button
+             {/*  <Button
  onClick={() => setIsNewGameDialogOpen(true)} 
                 className="w-full sm:w-auto bg-primary hover:bg-primary/90"
                 disabled={isSavingOrStarting} 
               > 
                 Start New Game
-              </Button>
+              </Button> */}
 
               <Button 
                 variant="destructive" 

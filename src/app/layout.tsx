@@ -1,5 +1,7 @@
 import type {Metadata} from 'next';
 import {Geist, Geist_Mono} from 'next/font/google';
+import { ThemeProvider } from 'next-themes'; // Import ThemeProvider
+import { ThemeProviderWrapper } from '@/components/ThemeProviderWrapper'; // Import ThemeProviderWrapper
 import './globals.css';
 import { Providers } from '@/components/Providers'; // Import the Providers component
 
@@ -22,13 +24,15 @@ export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>) {
+}>) { 
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <Providers> {/* Wrap children with Providers */}
-          {children}
-        </Providers>
+        <ThemeProviderWrapper>
+          <Providers> {/* Wrap children with Providers */}
+            {children}
+          </Providers>
+        </ThemeProviderWrapper>
       </body>
     </html>
   );
