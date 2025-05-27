@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/toaster';
 import { getFirebase } from '@/firebase';
 import { doc, setDoc, Timestamp, collection, updateDoc, query, where, getDocs, writeBatch, limit, orderBy, deleteDoc } from 'firebase/firestore';
 import { arrayUnion, type FieldValue } from 'firebase/firestore'; import type { Game, GameResult } from '@/lib/firebaseTypes';
+import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
@@ -61,6 +62,14 @@ export default function PlayPage() {
   useEffect(() => {
     gameDataRef.current = gameData;
   }, [gameData]);
+
+  // Sync dialog difficulty with main difficulty when dialog opens
+  useEffect(() => {
+    if (isNewGameDialogOpen) {
+      setSelectedNewGameDifficulty(selectedDifficultyKey);
+    }
+  }, [isNewGameDialogOpen, selectedDifficultyKey]);
+
 
 
     useEffect(() => {
@@ -477,7 +486,6 @@ export default function PlayPage() {
     <AppLayout>
       <div className="container mx-auto p-4 md:p-8 flex flex-col items-center">
         <h1 className="text-3xl font-bold text-foreground mb-8">Play MineVerse</h1>
-
         <Card className="w-full max-w-3xl mb-8">
           <CardHeader>
             <CardTitle>Game Setup</CardTitle>

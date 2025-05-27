@@ -6,6 +6,39 @@ const timestampSchema = z.custom<Timestamp>((data) => data instanceof Object && 
   message: 'Expected Firestore Timestamp',
 });
 
+// Define FirestoreUser interface
+export interface FirestoreUser {
+  id: string;
+  username?: string;
+  email?: string | null;
+  profilePreferences?: {
+    displayName?: string;
+    avatar?: string | null; // Changed to allow null based on schema
+    allowStatsVisibility?: boolean;
+    allowHistoryVisibility?: boolean;
+  } | null;
+  userFriendCode?: string;
+  createdAt?: Timestamp | null;
+  // Add user statistics fields here for comparison
+  stats?: { // Assuming stats are stored as a subfield
+    gamesPlayed: number;
+    gamesWon: number;
+    winRate: number;
+    averageTimePerGame: number; // Example stat
+    // Add other relevant stats
+  };
+}
+
+// Define FriendshipLink interface
+export interface FriendshipLink {
+  id: string;
+  user1Id: string;
+  user2Id: string;
+  status: 'pending' | 'accepted' | 'rejected'; // Example status field
+  createdAt?: Timestamp | null;
+  // Add other relevant fields for friendship
+}
+
 // User Entity
 export const UserSchema = z.object({
   id: z.string(),
@@ -14,7 +47,7 @@ export const UserSchema = z.object({
   profilePreferences: z.object({
     displayName: z.string().optional(),
     avatar: z.string().optional().or(z.literal("")), // Allows empty string for avatar
-    allowStatsVisibility: z.boolean().optional(), // New field for stats visibility
+    allowStatsVisibility: z.boolean().optional(),
     allowHistoryVisibility: z.boolean().optional(), // New field for history visibility
   }).nullable().optional(), // Made nullable and optional
   userFriendCode: z.string().length(10, "Friend code must be 10 characters").optional(),

@@ -16,7 +16,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   useSidebar,
-} from '@/components/ui/sidebar';
+} from '@/components/ui/sidebar'; 
 import { Home, History, Users, Settings, LogOut, HelpCircle, BarChart3, LogIn, UserPlus } from 'lucide-react'; // Added LogIn, UserPlus
 import Link from 'next/link';
 import Image from 'next/image';
@@ -32,6 +32,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useRouter, usePathname } from 'next/navigation';
+import { Label } from "@/components/ui/label"
+import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
 
 
 const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -112,6 +114,15 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                  </Link>
                </SidebarMenuButton>
              </SidebarMenuItem>
+             {user && ( // Only show if user is logged in
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === '/compare-stats'} tooltip="Compare Stats">
+                  <Link href="/compare-stats">
+                    <BarChart3 /> {/* Using BarChart3 as a comparison icon */}
+                    <span>Compare Stats</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>)}
              <SidebarMenuItem>
  <SidebarMenuButton asChild isActive={pathname === '/profile'} tooltip="Profile Settings" className={!user ? 'text-gray-400 pointer-events-none' : 'text-foreground data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground'}>
                  <Link href={user ? `/profile?id=${user.uid}` : "/profile"}>
@@ -148,6 +159,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
              <div className="ml-auto flex items-center gap-4">
                  {user ? ( // If user is logged in, show dropdown
                     <DropdownMenu>
+                      <ThemeToggle />
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                                 <Avatar className="h-8 w-8">

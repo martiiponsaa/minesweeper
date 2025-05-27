@@ -55,6 +55,7 @@ import { ChevronLeft } from 'lucide-react';
         let losses = 0;
         let totalSolveTime = 0;
         let completedGamesCount = 0;
+        const totalSolveTimePerDifficulty: Record<string, number> = {};
         const difficultyCounts: Record<string, {played: number, wins: number}> = {};
 
         games.forEach(game => {
@@ -62,6 +63,10 @@ import { ChevronLeft } from 'lucide-react';
                 wins++;
                 if (game.endTime && game.startTime) {
                     totalSolveTime += (game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000;
+                    if (game.difficulty) {
+                        if (!totalSolveTimePerDifficulty[game.difficulty]) totalSolveTimePerDifficulty[game.difficulty] = 0;
+                        totalSolveTimePerDifficulty[game.difficulty] += (game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000;
+                    } else { /* Handle games without difficulty if necessary */ }
                     completedGamesCount++;
                 }
             } else if (game.result === 'lost') {
@@ -69,6 +74,10 @@ import { ChevronLeft } from 'lucide-react';
                 if (game.endTime && game.startTime) { 
                     totalSolveTime += (game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000;
                     completedGamesCount++;
+                    if (game.difficulty) {
+                        if (!totalSolveTimePerDifficulty[game.difficulty]) totalSolveTimePerDifficulty[game.difficulty] = 0;
+                        totalSolveTimePerDifficulty[game.difficulty] += (game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000;
+                    }
                 }
             }
 
@@ -94,10 +103,26 @@ import { ChevronLeft } from 'lucide-react';
                     return `${minutes}m ${seconds}s`;
                 } else { return `${durationInSeconds}s`; }})() : 0;
 
+        const avgSolveTimePerDifficulty: Record<string, string> = {};
+        Object.keys(difficultyCounts).forEach(difficulty => {
+            const gamesPlayedAtDifficulty = difficultyCounts[difficulty].played;
+            const totalTime = totalSolveTimePerDifficulty[difficulty] || 0;
+            if (gamesPlayedAtDifficulty > 0 && completedGamesCount > 0) { // Added completedGamesCount check here
+                 const durationInSeconds = Math.round(totalTime / gamesPlayedAtDifficulty); // Corrected variable
+                 if (durationInSeconds >= 60) {
+                    const minutes = Math.floor(durationInSeconds / 60);
+                    const seconds = durationInSeconds % 60;
+                    avgSolveTimePerDifficulty[difficulty] = `${minutes}m ${seconds}s`;
+                 } else {
+                    avgSolveTimePerDifficulty[difficulty] = `${durationInSeconds}s`;
+                 }
+            } else {
+                 avgSolveTimePerDifficulty[difficulty] = 'N/A';
+            }
+        });
+
         const gamesByDifficulty = Object.entries(difficultyCounts).map(([name, data]) => ({
-            name,
-            played: data.played,
-            wins: data.wins,
+            name, played: data.played, wins: data.wins, avgSolveTime: avgSolveTimePerDifficulty[name] || 'N/A'
         }));
         
         const winLossData = [
@@ -105,7 +130,7 @@ import { ChevronLeft } from 'lucide-react';
             { name: 'Losses', value: losses, fill: 'hsl(var(--chart-3))' }, // Gold-like
         ];
 
-        return { gamesPlayed, wins, losses, winRate, avgSolveTime, gamesByDifficulty, winLossData };
+        return { gamesPlayed, wins, losses, winRate, avgSolveTime, gamesByDifficulty, winLossData, avgSolveTimePerDifficulty };
     };
 
     // Fetch the target user's data to display their name if viewing another user's profile
@@ -117,7 +142,7 @@ import { ChevronLeft } from 'lucide-react';
     const stats = calculateStats();
      
     const chartConfig = {
-       played: { label: "Played", color: "hsl(var(--primary))" }, // Teal
+       played: { label: "Played", color: "hsl(var(--primary))" }, 
        wins: { label: "Wins", color: "hsl(var(--accent))" }, // Gold
     } satisfies import("@/components/ui/chart").ChartConfig
      
@@ -222,6 +247,7 @@ import { ChevronLeft } from 'lucide-react';
                                      <p className="text-sm text-muted-foreground">Avg. Solve Time</p>
                                  </div>
                              </CardContent>
+
                              {games.length === 0 && (
                                 <CardFooter className="justify-center">
                                     <p className="text-muted-foreground">Play some games to see your stats!</p>
@@ -270,11 +296,29 @@ import { ChevronLeft } from 'lucide-react';
                                             <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
                                             <RechartsBar dataKey="played" fill="var(--color-played)" radius={4} name="Played"/>
                                             <RechartsBar dataKey="wins" fill="var(--color-wins)" radius={4} name="Wins"/>
-                                        </BarChart>
+                                           </BarChart>
                                     </ChartContainer>
                                     )}
                                 </CardContent>
                             </Card>
+                            {/* Average Solve Time by Difficulty */}
+                            {stats.avgSolveTimePerDifficulty && Object.keys(stats.avgSolveTimePerDifficulty).length > 0 && (
+                                 <Card>
+                                    <CardHeader>
+                                        <CardTitle>Average Solve Time by Difficulty</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ul className="space-y-2">
+                                            {Object.entries(stats.avgSolveTimePerDifficulty).map(([difficulty, avgTime]) => (
+                                                <li key={difficulty} className="flex justify-between items-center">
+                                                    <span className="font-medium">{difficulty}:</span>
+                                                    <span>{avgTime}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </CardContent>
+                                 </Card>
+                            )}
                         </div>
                     </div>
                  )}
