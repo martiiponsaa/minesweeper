@@ -27,7 +27,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
 import { UserCog } from 'lucide-react';
-import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
 
 const UserProfileFormSchema = ProfilePreferencesSchema.extend({
   allowStatsVisibility: z.boolean().default(true),
@@ -46,8 +45,12 @@ export default function ProfilePageContent() {
 
   // Determine if the profile being viewed is the logged-in user's profile
   const isOwnProfile = !userIdFromUrl || userIdFromUrl === user?.uid;
+  const isEditingOwnProfile = isOwnProfile && user;
+  const isViewingOtherUserProfile = userIdFromUrl && userIdFromUrl !== user?.uid;
 
-  const targetUserId = userIdFromUrl && user?.uid === userIdFromUrl ? user?.uid : undefined; // Only fetch if viewing own profile
+  const ownProfileDocId = isEditingOwnProfile ? user.uid : undefined;
+  const otherUserDocIdToFetch = isViewingOtherUserProfile ? userIdFromUrl : undefined;
+
 
   const { data: userData, loading: userDocumentLoading, error: userDocumentError } = useFirestoreDocument<UserType>(
     'users',
