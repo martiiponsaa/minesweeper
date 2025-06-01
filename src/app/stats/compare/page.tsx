@@ -1,3 +1,4 @@
+
 "use client"; // Add this line at the top
 
 import React, { useState, useEffect } from 'react';
@@ -10,9 +11,12 @@ import { Button } from '@/components/ui/button'; // Assuming Button component lo
 import { useFirestoreDocument } from '@/hooks/useFirestoreDocument';
 import { UserSchema, type User as UserType } from '@/lib/firebaseTypes';
 import { GameSchema, type Game } from '@/lib/firebaseTypes';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const CompareStatsPage: React.FC = () => {
-  const router = useRouter(); // Moved useRouter to the top
+  const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const friendId = searchParams.get('friendId');
@@ -37,7 +41,6 @@ const CompareStatsPage: React.FC = () => {
     UserSchema,
   );
 
-  // Placeholder for calculateStats - ideally, import the actual function
   const calculateStats = (games: Game[] | null) => {
       if (!games || games.length === 0) {
           return {
@@ -81,8 +84,6 @@ const CompareStatsPage: React.FC = () => {
                   return `${minutes}m ${seconds}s`;
                 } else { return `${durationInSeconds}s` }})() : 'N/A';
 
-
-
       return { gamesPlayed, wins, losses, winRate, avgSolveTime };
   };
 
@@ -92,10 +93,27 @@ const CompareStatsPage: React.FC = () => {
   const loading = authLoading || userGamesLoading || friendGamesLoading || friendUserLoading;
   const error = userGamesError || friendGamesError;
 
+
   if (loading) {
     return (
       <AppLayout>
-        <p>Loading comparison...</p>
+        <div className="container mx-auto p-4">
+          <Skeleton className="h-10 w-32 mb-4" />
+          <Skeleton className="h-8 w-48 mb-6" />
+          <Card>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex justify-between">
+                    <Skeleton className="h-5 w-1/4" />
+                    <Skeleton className="h-5 w-1/4" />
+                    <Skeleton className="h-5 w-1/4" />
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </AppLayout>
     );
   }
@@ -103,62 +121,77 @@ const CompareStatsPage: React.FC = () => {
   if (error) {
     return (
       <AppLayout>
-        <p>Error loading stats: {error.message}</p>
+        <div className="container mx-auto p-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Error</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-destructive">Error loading stats: {error.message}</p>
+              <Button onClick={() => router.push('/friends')} className="mt-4">
+                Back to Friends
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </AppLayout>
     );
   }
 
-  // You might want to fetch user/friend details to display names
-
     return (
         <AppLayout>
             <div className="container mx-auto p-4">
-                <Button onClick={() => router.push('/friends')} className="mb-4">
+                <Button onClick={() => router.push('/friends')} className="mb-4" variant="outline">
                     Back to Friends
                 </Button>
-                <h1 className="text-2xl font-bold mb-4">Stats Comparison</h1>
+                <h1 className="text-2xl font-bold mb-6 text-foreground">Stats Comparison</h1>
                 {!user || !friendId ? (
-                    <p>Please log in and select a friend to compare stats.</p>
+                    <Card>
+                        <CardContent className="p-6 text-center text-muted-foreground">
+                            Please log in and select a friend to compare stats.
+                        </CardContent>
+                    </Card>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-100">
-                                <tr>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stat</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Your Stats</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{friendUserData?.profilePreferences?.displayName || friendUserData?.username || 'Friend'}'s Stats</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {/* Table rows will go here */}
-                                <tr className="odd:bg-white even:bg-gray-50 hover:bg-gray-100">
-                                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">Games Played</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{userStats.gamesPlayed}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{friendStats.gamesPlayed}</td>
-                                </tr>
-                                <tr className="odd:bg-white even:bg-gray-50 hover:bg-gray-100">
-                                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">Wins</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{userStats.wins}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{friendStats.wins}</td>
-                                </tr>
-                                <tr className="odd:bg-white even:bg-gray-50 hover:bg-gray-100">
-                                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">Losses</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{userStats.losses}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{friendStats.losses}</td>
-                                </tr>
-                                <tr className="odd:bg-white even:bg-gray-50 hover:bg-gray-100">
-                                    <td className="px-6 py-4 whitespace-nowrap">Win Rate</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{(userStats.winRate * 100).toFixed(0)}%</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{(friendStats.winRate * 100).toFixed(0)}%</td>
-                                </tr>
-                                <tr className="odd:bg-white even:bg-gray-50 hover:bg-gray-100">
-                                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">Avg. Solve Time</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{userStats.avgSolveTime}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{friendStats.avgSolveTime}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                    <Card>
+                        <CardContent className="p-0">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Stat</TableHead>
+                                        <TableHead>Your Stats</TableHead>
+                                        <TableHead>{friendUserData?.profilePreferences?.displayName || friendUserData?.username || 'Friend'}'s Stats</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    <TableRow>
+                                        <TableCell className="font-medium">Games Played</TableCell>
+                                        <TableCell>{userStats.gamesPlayed}</TableCell>
+                                        <TableCell>{friendStats.gamesPlayed}</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell className="font-medium">Wins</TableCell>
+                                        <TableCell>{userStats.wins}</TableCell>
+                                        <TableCell>{friendStats.wins}</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell className="font-medium">Losses</TableCell>
+                                        <TableCell>{userStats.losses}</TableCell>
+                                        <TableCell>{friendStats.losses}</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell className="font-medium">Win Rate</TableCell>
+                                        <TableCell>{(userStats.winRate * 100).toFixed(0)}%</TableCell>
+                                        <TableCell>{(friendStats.winRate * 100).toFixed(0)}%</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                        <TableCell className="font-medium">Avg. Solve Time</TableCell>
+                                        <TableCell>{userStats.avgSolveTime}</TableCell>
+                                        <TableCell>{friendStats.avgSolveTime}</TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
                 )}
             </div>
         </AppLayout>
