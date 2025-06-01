@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { ReactNode } from 'react';
@@ -151,7 +152,6 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                  <ThemeToggle /> {/* Added ThemeToggle button */}
                  {user ? ( // If user is logged in, show dropdown
                     <DropdownMenu>
-                      <ThemeToggle />
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                                 <Avatar className="h-8 w-8">
