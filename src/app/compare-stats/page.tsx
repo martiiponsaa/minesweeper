@@ -1,10 +1,11 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useFirestoreCollection } from "@/hooks/useFirestoreCollection";
 import { collection, query, where } from "firebase/firestore";
-import { usersCollection, friendshipLinksCollection } from "../../firebase/index";
+import { getFirebase } from "@/firebase"; // Import getFirebase
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -16,23 +17,24 @@ interface AverageStats {
   averageTime: number;
 }
 
-import { FirestoreUser, FriendshipLink } from "@/lib/firebaseTypes"; // Keep this import as is
+import { FirestoreUser, FriendshipLink } from "@/lib/firebaseTypes"; 
 const CompareStatsPage = () => {
   const { user } = useAuth();
+  const { firestore } = getFirebase(); // Initialize Firestore
   const [friendStats, setFriendStats] = useState<FirestoreUser[]>([]);
   const [averageFriendStats, setAverageFriendStats] = useState<AverageStats | null>(null);
 
   const { data: friendsList, loading: friendsLoading } = useFirestoreCollection(
-    user ? query(collection(db, "friendship_links"), where("users", "array-contains", user.uid)) : null
-  ); // This will be corrected in the next step
+    user ? query(collection(firestore, "friendships"), where("users", "array-contains", user.uid)) : null
+  );
 
   const friendIds = friendsList
     ?.map((link: FriendshipLink) => link.users.find((id) => id !== user?.uid))
     .filter(Boolean) as string[];
 
   const { data: friendsProfiles, loading: friendsProfilesLoading } = useFirestoreCollection(
-    friendIds && friendIds.length > 0 ? query(collection(db, "users"), where("uid", "in", friendIds)) : null
-  ); // This will be corrected in the next step
+    friendIds && friendIds.length > 0 ? query(collection(firestore, "users"), where("id", "in", friendIds)) : null
+  );
 
   useEffect(() => {
     if (friendsProfiles && friendsProfiles.length > 0) {

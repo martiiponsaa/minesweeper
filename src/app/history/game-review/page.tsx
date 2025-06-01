@@ -71,16 +71,18 @@ function GameReviewContent() {
       return;
     }
 
-    let difficultySettings: DifficultySetting | undefined = DIFFICULTY_LEVELS[game.difficulty as DifficultyKey];
+    const trimmedDifficulty = game.difficulty.trim(); // Trim whitespace
+
+    let difficultySettings: DifficultySetting | undefined = DIFFICULTY_LEVELS[trimmedDifficulty as DifficultyKey];
     if (!difficultySettings) {
       // If not found by key, try by name (case-insensitive)
       difficultySettings = Object.values(DIFFICULTY_LEVELS).find(
-        (level) => level.name.toLowerCase() === game.difficulty.toLowerCase()
+        (level) => level.name.toLowerCase() === trimmedDifficulty.toLowerCase()
       );
     }
     
     if (!difficultySettings) {
-      console.error(`Unknown difficulty: ${game.difficulty}`);
+      console.error(`Unknown difficulty: ${game.difficulty} (trimmed: ${trimmedDifficulty})`);
       setReplayedBoardState(null);
       setReplayedTimeElapsed(0);
       setInvalidGameStateForReplay(true); // Indicate an issue with game data
@@ -228,7 +230,8 @@ function GameReviewContent() {
         console.error("Error parsing game.gameState for bomb reveal:", e);
       }
     } else if (!showBombs && game && !invalidGameStateForReplay) {
-        const difficultySettings = DIFFICULTY_LEVELS[game.difficulty.toLowerCase() as DifficultyKey] || Object.values(DIFFICULTY_LEVELS).find(l => l.name.toLowerCase() === game.difficulty.toLowerCase());
+        const trimmedDifficulty = game.difficulty.trim();
+        const difficultySettings = DIFFICULTY_LEVELS[trimmedDifficulty.toLowerCase() as DifficultyKey] || Object.values(DIFFICULTY_LEVELS).find(l => l.name.toLowerCase() === trimmedDifficulty.toLowerCase());
 
         if (difficultySettings && game.gameState && !nonJsonGameStates.includes(game.gameState)) {
              let targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
@@ -365,7 +368,7 @@ function GameReviewContent() {
               <div className="flex flex-col items-center space-y-4">
                 <div className="w-full p-0 sm:p-2 md:p-4">
                   <GameBoard
-                    difficultyKey={game.difficulty.toLowerCase() as DifficultyKey}
+                    difficultyKey={(game.difficulty.trim().toLowerCase()) as DifficultyKey}
                     initialBoardState={JSON.stringify(replayedBoardState)}
                     initialTimeElapsed={replayedTimeElapsed}
                     reviewMode={true}
@@ -378,7 +381,7 @@ function GameReviewContent() {
                           onClick={() => setShowBombs(prev => !prev)}
                           variant={showBombs ? "secondary" : "outline"}
                           disabled={invalidGameStateForReplay && !showBombs}
-                          title={invalidGameStateForReplay && !showBombs ? "Cannot show bombs, game data is incomplete." : (showBombs ? "Hide Bombs" : "Show Bombs")}
+                          title={invalidGameStateForReplay && !showBombs ? "Cannot show bombs, game data is incomplete." : (showBombs ? "Hide Bombs" : "Show All Bombs")}
                       >
                         <Bomb className="mr-2 h-4 w-4" /> {showBombs ? "Hide Bombs" : "Show All Bombs"}
                       </Button>
