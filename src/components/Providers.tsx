@@ -2,10 +2,8 @@
 
 import React, { ReactNode } from 'react';
 import { AuthProvider } from '@/hooks/useAuth';
-import { Toaster } from "@/components/ui/toaster"
-
-// Import other providers as needed
-// import { AnotherProvider } from '@/hooks/useAnother';
+import { Toaster } from "@/components/ui/toaster";
+import { ThemeProvider } from 'next-themes';
 
 type ProvidersProps = {
   children: ReactNode;
@@ -13,12 +11,11 @@ type ProvidersProps = {
 
 export const Providers: React.FC<ProvidersProps> = ({ children }) => {
   return (
-    <AuthProvider>
-      {/* Wrap with other providers here */}
-      {/* <AnotherProvider> */}
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+      <AuthProvider>
         {children}
         <Toaster />
-      {/* </AnotherProvider> */}
-    </AuthProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 };

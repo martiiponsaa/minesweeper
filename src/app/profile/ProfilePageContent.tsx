@@ -27,9 +27,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
 import { UserCog } from 'lucide-react';
+import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
 
 const UserProfileFormSchema = ProfilePreferencesSchema.extend({
-  // Add new fields for checkbox preferences
   allowStatsVisibility: z.boolean().default(true),
   allowHistoryVisibility: z.boolean().default(true),
 });
@@ -38,7 +38,7 @@ type UserProfileFormValues = z.infer<typeof UserProfileFormSchema>;
 
 export default function ProfilePageContent() {
   const { user, loading: authLoading } = useAuth();
-  const { firestore, auth } = getFirebase(); // Added auth
+  const { firestore, auth } = getFirebase();
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const userIdFromUrl = searchParams.get('id');
@@ -54,10 +54,6 @@ export default function ProfilePageContent() {
     ownProfileDocId,
     UserSchema,
   );
-
-  // Determine if we are viewing another user's profile
-  const isViewingOtherUserProfile = !!userIdFromUrl && !!user && userIdFromUrl !== user.uid;
-  const otherUserDocIdToFetch = isViewingOtherUserProfile ? userIdFromUrl : undefined;
   
   const { data: otherUserData, loading: otherUserLoading, error: otherUserError } = useFirestoreDocument<UserType>(
       'users',
@@ -71,8 +67,8 @@ export default function ProfilePageContent() {
     defaultValues: {
       displayName: '',
       avatar: '',
-      allowStatsVisibility: true, // Default to true
-      allowHistoryVisibility: true, // Default to true
+      allowStatsVisibility: true,
+      allowHistoryVisibility: true,
     },
   });
 
@@ -162,7 +158,6 @@ export default function ProfilePageContent() {
   
   const isLoading = authLoading || (isEditingOwnProfile && userDocumentLoading) || (isViewingOtherUserProfile && otherUserLoading);
 
-  // Skeleton for own profile edit page
   if (isLoading && isEditingOwnProfile) { 
  return (
       <AppLayout>
@@ -199,7 +194,6 @@ export default function ProfilePageContent() {
     );
   }
 
-  // Prompt to login if trying to access own profile settings and not logged in
  if (!user && !authLoading && (!userIdFromUrl || (userIdFromUrl && userIdFromUrl === user?.uid))) {
     return (
       <AppLayout>
@@ -215,7 +209,6 @@ export default function ProfilePageContent() {
     );
   }
 
-  // Error for own profile document
   if (userDocumentError && isEditingOwnProfile) { 
      return (
       <AppLayout>
@@ -233,7 +226,6 @@ export default function ProfilePageContent() {
     );
   }
 
-  // Displaying another user's profile
   if (isViewingOtherUserProfile) {
     const otherUserNameToDisplay = otherUserData?.profilePreferences?.displayName || otherUserData?.username || 'User';
 
@@ -335,7 +327,6 @@ export default function ProfilePageContent() {
     );
   }
   
-  // Default to showing own profile edit form if logged in and not viewing other
   if (isEditingOwnProfile && userData) {
     return (
       <AppLayout>
@@ -344,7 +335,7 @@ export default function ProfilePageContent() {
           <Card className="max-w-2xl mx-auto shadow-lg">
             <CardHeader>
               <CardTitle>Edit Your Profile</CardTitle>
-              <CardDescription>Update your display name and avatar.</CardDescription>
+              <CardDescription>Update your display name, avatar, and preferences.</CardDescription>
             </CardHeader>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -426,6 +417,15 @@ export default function ProfilePageContent() {
                     </FormItem>
                     )}
                   />
+                  <div className="space-y-2 py-2"> {/* Added py-2 for spacing */}
+                    <Label>Theme</Label>
+                    <div className="flex items-center space-x-2">
+                        <ThemeToggle />
+                        <span className="text-sm text-muted-foreground">
+                           Toggle between light and dark mode.
+                        </span>
+                    </div>
+                  </div>
                    <div className="space-y-2">
                       <Label htmlFor="email">Email</Label>
                       <Input id="email" value={user?.email || 'No email associated'} readOnly disabled className="bg-muted cursor-not-allowed" />
@@ -453,8 +453,6 @@ export default function ProfilePageContent() {
     );
   }
   
-  // Fallback for states not explicitly handled (e.g., user is null, and not trying to view other's profile)
-  // This might include cases where userIdFromUrl is not provided and user is not logged in.
   if (!user && !authLoading && !isViewingOtherUserProfile) {
     return (
         <AppLayout>
@@ -470,8 +468,6 @@ export default function ProfilePageContent() {
     );
   }
 
-
-  // Default fallback if no other condition is met (should ideally not be reached if logic is exhaustive)
   return (
     <AppLayout>
       <div className="container mx-auto p-4 md:p-8">
@@ -598,4 +594,3 @@ export default function ProfilePageContent() {
     </AppLayout>
   );
 }
-

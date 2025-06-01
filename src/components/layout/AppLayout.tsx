@@ -156,7 +156,8 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
              <SidebarTrigger className="sm:hidden"/>
 
              {/* User Menu or Login/Register Button */}
-             <div className="ml-auto flex items-center gap-4">
+             <div className="ml-auto flex items-center gap-2"> {/* Changed gap-4 to gap-2 for tighter spacing */}
+                 <ThemeToggle /> {/* Added ThemeToggle button */}
                  {user ? ( // If user is logged in, show dropdown
                     <DropdownMenu>
                       <ThemeToggle />
