@@ -12,7 +12,7 @@ import {
   getRemainingMines,
   calculateAdjacentMines,
   placeMinesAndRevealFirstArea,
-  findSafeHintCell, 
+  findSafeHintCell,
 } from '@/lib/minesweeper';
 import { DIFFICULTY_LEVELS, type DifficultyKey, type DifficultySetting } from '@/config/minesweeperSettings';
 import { Button } from '@/components/ui/button';
@@ -35,19 +35,20 @@ export type InternalGameStatus = 'won' | 'lost' | 'quit';
 
 interface GameBoardProps {
   difficultyKey: DifficultyKey;
-  onGameEnd?: (status: InternalGameStatus, time: number, boardState: string) => void; 
+  onGameEnd?: (status: InternalGameStatus, time: number, boardState: string) => void;
   isGuest: boolean;
-  initialBoardState?: string; 
-  initialTimeElapsed?: number; 
-  reviewMode?: boolean; 
-  activeGameId: string | null; 
-  onMoveMade?: (moveType: 'reveal' | 'flag' | 'unflag', x: number, y: number) => void; 
+  initialBoardState?: string;
+  initialTimeElapsed?: number;
+  reviewMode?: boolean;
+  activeGameId: string | null;
+  onMoveMade?: (moveType: 'reveal' | 'flag' | 'unflag', x: number, y: number) => void;
+  onInternalGameStatusChange?: (status: GameStatus) => void; // New prop
 }
 
 export interface GameBoardRef {
   getCurrentBoardState: () => string;
   getCurrentTimeElapsed: () => number;
-  resetBoardToInitial: () => void; 
+  resetBoardToInitial: () => void;
   calculateTimeFromStart: (startTime: Timestamp) => number;
   requestHint: () => boolean;
 }
@@ -62,22 +63,23 @@ const nonJsonGameStates = [
 ];
 
 
-const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({ 
-  difficultyKey, 
-  onGameEnd, 
+const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
+  difficultyKey,
+  onGameEnd,
   isGuest,
   initialBoardState,
   initialTimeElapsed = 0,
-  reviewMode = false, 
-  activeGameId, 
-  onMoveMade, 
+  reviewMode = false,
+  activeGameId,
+  onMoveMade,
+  onInternalGameStatusChange, // Destructure new prop
 }, ref) => {
   const router = useRouter();
   const [difficulty, setDifficulty] = useState<DifficultySetting>(DIFFICULTY_LEVELS[difficultyKey]);
-  
+
   const [board, setBoard] = useState<BoardState>(() => {
     const currentDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
-    if (initialBoardState && !nonJsonGameStates.includes(initialBoardState)) { // Allow loading initial state if not in review mode or if it's a valid JSON
+    if (initialBoardState && !nonJsonGameStates.includes(initialBoardState)) {
       try {
         const parsedBoard = JSON.parse(initialBoardState) as BoardState;
         if (Array.isArray(parsedBoard) && parsedBoard.length > 0 && Array.isArray(parsedBoard[0])) {
@@ -102,8 +104,8 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     return createInitialBoard(currentDifficultySettings.rows, currentDifficultySettings.cols);
   });
 
-  const [gameStatus, setGameStatus] = useState<GameStatus>(() => {
-    if (initialBoardState && !nonJsonGameStates.includes(initialBoardState)) { 
+  const [gameStatus, setGameStatusInternal] = useState<GameStatus>(() => { // Renamed to avoid conflict
+    if (initialBoardState && !nonJsonGameStates.includes(initialBoardState)) {
         try {
             const parsedBoard = JSON.parse(initialBoardState) as BoardState;
             const currentDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
@@ -113,16 +115,22 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
             if (parsedBoard.some(row => row.some(cell => cell.isMine && cell.isRevealed && cell.exploded))) {
                 return 'lost';
             }
-            // If board is loaded, it's 'playing' unless already won/lost.
             const isBoardUntouched = parsedBoard.every(row => row.every(cell => !cell.isRevealed && !cell.isFlagged));
             return isBoardUntouched && !reviewMode ? 'ready' : 'playing';
-        } catch(e) { 
+        } catch(e) {
             console.error("Error determining initial game status from board state:", e);
             return reviewMode ? 'playing' : 'ready';
         }
     }
-    return reviewMode ? 'playing' : 'ready'; 
+    return reviewMode ? 'playing' : 'ready';
   });
+
+  // Wrapper for setGameStatus to also call onInternalGameStatusChange
+  const setGameStatus = (status: GameStatus) => {
+    setGameStatusInternal(status);
+    onInternalGameStatusChange?.(status);
+  };
+
 
   const [minesRemaining, setMinesRemaining] = useState<number>(() => {
       const currentDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
@@ -140,28 +148,28 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
   const [showDialog, setShowDialog] = useState<boolean>(false);
   const [dialogMessage, setDialogMessage] = useState<{title: string, description: React.ReactNode, icon?: React.ReactNode}>({title: '', description: '', icon: undefined});
-  
+
   const [isGameResolvedByLoad, setIsGameResolvedByLoad] = useState(
-    initialBoardState && !nonJsonGameStates.includes(initialBoardState) && 
+    initialBoardState && !nonJsonGameStates.includes(initialBoardState) &&
     (gameStatus === 'won' || gameStatus === 'lost') && !reviewMode
   );
 
 
   const resetGameInternals = useCallback((newDifficultyKey: DifficultyKey, keepDialog = false) => {
-    if (reviewMode) return; 
+    if (reviewMode) return;
     const newDifficultySettings = DIFFICULTY_LEVELS[newDifficultyKey];
     setDifficulty(newDifficultySettings);
-    const freshBoard = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols); 
+    const freshBoard = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
     setBoard(freshBoard);
-    setGameStatus('ready');
-    setMinesRemaining(getRemainingMines(freshBoard, newDifficultySettings.mines)); 
-    setTimeElapsed(0); 
+    setGameStatus('ready'); // This will also call onInternalGameStatusChange
+    setMinesRemaining(getRemainingMines(freshBoard, newDifficultySettings.mines));
+    setTimeElapsed(0);
     setIsGameResolvedByLoad(false);
     setRevealedCellsCount(0);
     if (!keepDialog) {
       setShowDialog(false);
     }
-  }, [reviewMode]); 
+  }, [reviewMode, onInternalGameStatusChange]);
 
 
   useEffect(() => {
@@ -178,7 +186,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
             const parsedBoardInput = JSON.parse(initialBoardState) as BoardState;
              if (Array.isArray(parsedBoardInput) && parsedBoardInput.length > 0 && Array.isArray(parsedBoardInput[0]) &&
                 parsedBoardInput.length === newDifficultySettings.rows && parsedBoardInput[0].length === newDifficultySettings.cols) {
-                
+
                 boardToSet = parsedBoardInput;
                 const needsRecalc = boardToSet.some(row => row.some(c => typeof c.adjacentMines !== 'number'));
                 if(needsRecalc){
@@ -187,12 +195,11 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
                 if (boardToSet.some(row => row.some(cell => cell.isMine && cell.isRevealed && cell.exploded))) {
                     statusToSet = 'lost';
-                    resolvedByLoad = !reviewMode; // Only mark as resolved by load if not in review mode
+                    resolvedByLoad = !reviewMode;
                 } else if (checkWinCondition(boardToSet, newDifficultySettings.rows, newDifficultySettings.cols, newDifficultySettings.mines)) {
                     statusToSet = 'won';
                     resolvedByLoad = !reviewMode;
                 } else {
-                   // If not won or lost, it's 'playing' if any cell is revealed/flagged, else 'ready' (for non-review)
                    const isBoardAltered = parsedBoardInput.some(row => row.some(cell => cell.isRevealed || cell.isFlagged));
                    statusToSet = reviewMode ? 'playing' : (isBoardAltered ? 'playing' : 'ready');
                 }
@@ -200,7 +207,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
                  console.warn("Parsed initialBoardState structure/dimensions mismatch, falling back to new board.");
                  boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
                  statusToSet = reviewMode ? 'playing' : 'ready';
-                 timeToSet = 0; 
+                 timeToSet = 0;
             }
         } catch (e) {
             console.error("Error processing initialBoardState, falling back to new board:", e);
@@ -208,17 +215,17 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
             statusToSet = reviewMode ? 'playing' : 'ready';
             timeToSet = 0;
         }
-    } else { 
+    } else {
         boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
         statusToSet = reviewMode ? 'playing' : 'ready';
-        timeToSet = 0; 
+        timeToSet = 0;
     }
 
     setBoard(boardToSet);
     setMinesRemaining(getRemainingMines(boardToSet, newDifficultySettings.mines));
-    setGameStatus(statusToSet);
+    setGameStatus(statusToSet); // This will call onInternalGameStatusChange
     setIsGameResolvedByLoad(resolvedByLoad);
-    
+
     let currentRevealedCount = 0;
     boardToSet.forEach(row => row.forEach(cell => {
         if(cell.isRevealed && !cell.isMine) currentRevealedCount++;
@@ -227,40 +234,40 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     setTimeElapsed(timeToSet);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [difficultyKey, initialBoardState, reviewMode, initialTimeElapsed]); 
+  }, [difficultyKey, initialBoardState, reviewMode, initialTimeElapsed, onInternalGameStatusChange]);
 
   useEffect(() => {
     let timerId: NodeJS.Timeout | undefined;
-    if (gameStatus === 'playing' && !reviewMode && !isGameResolvedByLoad) { 
+    if (gameStatus === 'playing' && !reviewMode && !isGameResolvedByLoad) {
       timerId = setInterval(() => {
         setTimeElapsed((prevTime) => prevTime + 1);
       }, 1000);
     }
     return () => clearInterval(timerId);
   }, [gameStatus, reviewMode, isGameResolvedByLoad]);
-  
+
   useEffect(() => {
-    if (board && difficulty) { 
+    if (board && difficulty) {
         setMinesRemaining(getRemainingMines(board, difficulty.mines));
     }
-  }, [board, difficulty, gameStatus]); // Added gameStatus to dependencies
+  }, [board, difficulty, gameStatus]);
 
 
   const handleCellClick = (x: number, y: number) => {
     const isControlClick = (window.event as MouseEvent)?.ctrlKey;
-    
+
     if (gameStatus === 'lost' || gameStatus === 'won' || reviewMode) {
-      return; // Prevent clicks if game is over or in review mode
+      return;
     }
 
     if (isControlClick) {
- handleCellContextMenu({ preventDefault: () => {} } as React.MouseEvent, x, y); // Simulate right-click for flag/unflag
+      handleCellContextMenu({ preventDefault: () => {} } as React.MouseEvent, x, y);
       return;
     }
-    
+
     if (gameStatus === 'ready') {
       const { newBoard: boardAfterFirstClick, cellsRevealedThisTurn } = placeMinesAndRevealFirstArea(
-        board, // The current empty board
+        board,
         difficulty.rows,
         difficulty.cols,
         difficulty.mines,
@@ -269,23 +276,22 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
       );
       setBoard(boardAfterFirstClick);
       setRevealedCellsCount(prevCount => prevCount + cellsRevealedThisTurn);
-      setGameStatus('playing');
-      setMinesRemaining(getRemainingMines(boardAfterFirstClick, difficulty.mines)); // Update mines remaining after placement
+      setGameStatus('playing'); // This will call onInternalGameStatusChange
+      setMinesRemaining(getRemainingMines(boardAfterFirstClick, difficulty.mines));
       if (activeGameId && onMoveMade) {
-        onMoveMade("reveal", x, y); // Log the first move
+        onMoveMade("reveal", x, y);
       }
-      return; // First click handling ends here
+      return;
     }
 
-    // Game is 'playing'
     const { newBoard, gameOver, cellsRevealedCount: newlyRevealed } = revealCell(
         board,
-        difficulty.rows, 
-        difficulty.cols, 
-        x, 
+        difficulty.rows,
+        difficulty.cols,
+        x,
         y
     );
-    
+
     setBoard(newBoard);
 
     let currentTotalRevealedCount = 0;
@@ -299,32 +305,32 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     }
 
     if (gameOver) {
-      setGameStatus('lost');
+      setGameStatus('lost'); // This will call onInternalGameStatusChange
       if (!reviewMode) {
-        setDialogMessage({ 
-            title: 'Game Over!', 
+        setDialogMessage({
+            title: 'Game Over!',
             description: (
                 <>
                   You hit a mine. Better luck next time!
                 </>
-            ), 
-            icon: <Frown className="h-6 w-6 text-red-500" /> 
+            ),
+            icon: <Frown className="h-6 w-6 text-red-500" />
         });
         setShowDialog(true);
         onGameEnd?.('lost', timeElapsed, JSON.stringify(newBoard));
       }
     } else {
       if (checkWinCondition(newBoard, difficulty.rows, difficulty.cols, difficulty.mines)) {
-        setGameStatus('won');
+        setGameStatus('won'); // This will call onInternalGameStatusChange
         if(!reviewMode){
-          setDialogMessage({ 
-            title: 'Congratulations!', 
+          setDialogMessage({
+            title: 'Congratulations!',
             description: (
                 <>
                     You cleared the board!
                 </>
-            ), 
-            icon: <PartyPopper className="h-6 w-6 text-yellow-500" /> 
+            ),
+            icon: <PartyPopper className="h-6 w-6 text-yellow-500" />
         });
           setShowDialog(true);
           onGameEnd?.('won', timeElapsed, JSON.stringify(newBoard));
@@ -336,30 +342,27 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
   const handleCellContextMenu = (e: React.MouseEvent, x: number, y: number) => {
     e.preventDefault();
     if (gameStatus === 'lost' || gameStatus === 'won' || reviewMode) {
-      return; // Prevent actions if game is over or in review mode
+      return;
     }
 
     let currentBoard = board;
-    // Allow flagging even if gameStatus is 'ready', then transition to 'playing'
     if (gameStatus === 'ready') {
       const { newBoard: boardAfterMinePlacement } = placeMinesAndRevealFirstArea(
         board,
         difficulty.rows,
         difficulty.cols,
         difficulty.mines,
-        x, // Provide x,y of flag, but it won't be revealed immediately
+        x,
         y,
       );
-      // Important: We don't want to reveal cells on a flag-first action.
-      // So, we take the boardWithMines but ensure all cells remain unrevealed initially.
       currentBoard = boardAfterMinePlacement.map(row => row.map(cell => ({...cell, isRevealed: false, exploded: false })));
-      setGameStatus('playing'); // Transition to playing
+      setGameStatus('playing'); // This will call onInternalGameStatusChange
     }
-    
+
     const finalBoardState = toggleFlag(currentBoard, x, y);
     setBoard(finalBoardState);
     setMinesRemaining(getRemainingMines(finalBoardState, difficulty.mines));
-    
+
     if (activeGameId && onMoveMade) {
       const cellAfterToggle = finalBoardState[y][x];
       if(cellAfterToggle.isFlagged) {
@@ -372,51 +375,49 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
 
   const getGameStatusIcon = () => {
-    if (reviewMode && (gameStatus === 'won' || gameStatus === 'lost')) { 
+    if (reviewMode && (gameStatus === 'won' || gameStatus === 'lost')) {
         return gameStatus === 'won' ? <PartyPopper className="h-8 w-8 text-yellow-500" /> : <Frown className="h-8 w-8 text-red-500" />;
     }
-    if (reviewMode) return <Eye className="h-8 w-8 text-blue-500" />; 
+    if (reviewMode) return <Eye className="h-8 w-8 text-blue-500" />;
     if (gameStatus === 'won') return <PartyPopper className="h-8 w-8 text-yellow-500" />;
     if (gameStatus === 'lost') return <Frown className="h-8 w-8 text-red-500" />;
     return <Smile className="h-8 w-8 text-foreground" />;
   };
-  
+
   const getGridStyle = () => {
-    let cellSize = "minmax(20px, 1fr)"; 
-    if (difficulty.cols <= 10 && difficulty.rows <=10) cellSize = "minmax(28px, 1fr)"; 
-    else if (difficulty.cols > 20 || difficulty.rows > 20) cellSize = "minmax(18px, 1fr)"; 
-    if (difficulty.cols > 25 || difficulty.rows > 25) cellSize = "minmax(16px, 1fr)"; 
+    let cellSize = "minmax(20px, 1fr)";
+    if (difficulty.cols <= 10 && difficulty.rows <=10) cellSize = "minmax(28px, 1fr)";
+    else if (difficulty.cols > 20 || difficulty.rows > 20) cellSize = "minmax(18px, 1fr)";
+    if (difficulty.cols > 25 || difficulty.rows > 25) cellSize = "minmax(16px, 1fr)";
 
     return {
       gridTemplateColumns: `repeat(${difficulty.cols}, ${cellSize})`,
-      maxWidth: `${difficulty.cols * 40}px`, 
+      maxWidth: `${difficulty.cols * 40}px`,
     };
   };
 
   useImperativeHandle(ref, () => ({
     getCurrentBoardState: () => JSON.stringify(board),
     getCurrentTimeElapsed: () => timeElapsed,
-    resetBoardToInitial: () => { 
+    resetBoardToInitial: () => {
         if (!reviewMode) {
             resetGameInternals(difficultyKey);
         }
     },
     calculateTimeFromStart: (startTime: Timestamp) => {
-        const now = Math.floor(Date.now() / 1000); 
+        const now = Math.floor(Date.now() / 1000);
         const startSeconds = startTime.seconds;
         return Math.max(0, now - startSeconds);
     },
     requestHint: () => {
-      if (gameStatus !== 'playing' || reviewMode) return false;
+      if (gameStatus !== 'playing' && gameStatus !== 'ready' || reviewMode) return false; // Allow hint on 'ready'
 
       const hintCell = findSafeHintCell(board, difficulty.rows, difficulty.cols);
       if (hintCell) {
-        // Simulate a click on the hint cell. This will use existing reveal logic
-        // and trigger onMoveMade if applicable.
-        handleCellClick(hintCell.x, hintCell.y);
-        return true; // Indicated a hint was actioned
+        handleCellClick(hintCell.x, hintCell.y); // This will handle game status transition if 'ready'
+        return true;
       }
-      return false; // No suitable hint found
+      return false;
     },
   }));
 
@@ -428,12 +429,12 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
           <FlagIcon className="mr-2 h-5 w-5 text-red-500" />
           <span className="text-foreground tabular-nums">{String(minesRemaining).padStart(3, '0')}</span>
         </div>
-        <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => { if(!reviewMode && (gameStatus === 'playing' || gameStatus === 'ready' || gameStatus === 'won' || gameStatus === 'lost')) resetGameInternals(difficultyKey) }} 
+        <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => { if(!reviewMode && (gameStatus === 'playing' || gameStatus === 'ready' || gameStatus === 'won' || gameStatus === 'lost')) resetGameInternals(difficultyKey) }}
             className="hover:bg-accent"
-            disabled={reviewMode} // Disable reset in review mode
+            disabled={reviewMode}
             title={reviewMode ? "Reviewing Game" : "Reset Game"}
         >
           {getGameStatusIcon()}
@@ -453,7 +454,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
         {board.map((row, y_idx) =>
           row.map((cell, x_idx) => (
             <CellComponent
-              key={`${y_idx}-${x_idx}-${gameStatus}-${cell.isRevealed}-${cell.isFlagged}-${cell.isMine}-${cell.adjacentMines}-${cell.exploded ?? 'noexplode'}-${cell.isReplayHighlight ?? 'nohighlight'}-${cell.isReplayHighlightBad ?? 'nogoodbad'}`} 
+              key={`${y_idx}-${x_idx}-${gameStatus}-${cell.isRevealed}-${cell.isFlagged}-${cell.isMine}-${cell.adjacentMines}-${cell.exploded ?? 'noexplode'}-${cell.isReplayHighlight ?? 'nohighlight'}-${cell.isReplayHighlightBad ?? 'nogoodbad'}`}
               cell={cell}
               onClick={() => handleCellClick(x_idx, y_idx)}
               onContextMenu={(e) => handleCellContextMenu(e, x_idx, y_idx)}
@@ -461,7 +462,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
           ))
         )}
       </div>
-      
+
       <AlertDialog open={showDialog && !reviewMode} onOpenChange={(open) => {if (!reviewMode) setShowDialog(open)}}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -481,21 +482,19 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
               Close
             </AlertDialogCancel>
             <AlertDialogAction onClick={() => {
-              setShowDialog(false); 
-              if (activeGameId) { // Ensure activeGameId is available
+              setShowDialog(false);
+              if (activeGameId) {
                 router.push(`/history/game-review?gameId=${activeGameId}`);
               } else {
-                // Handle case where activeGameId is null, maybe show a toast or fallback
                 console.warn("Cannot review game: activeGameId is null.");
               }
             }}>
               Review
             </AlertDialogAction>
             <AlertDialogAction onClick={() => {
-              setShowDialog(false); 
-              resetGameInternals(difficultyKey); 
+              setShowDialog(false);
+              resetGameInternals(difficultyKey);
               if (onGameEnd && (gameStatus === 'won' || gameStatus === 'lost')) {
-                // This doesn't directly trigger PlayPage's start, but resets locally.
                 // PlayPage would need a callback or state change to fully restart.
               }
             }}>
@@ -511,3 +510,4 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
 GameBoard.displayName = 'GameBoard';
 export default GameBoard;
+
