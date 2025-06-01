@@ -7,7 +7,7 @@
  import { History, CheckCircle2, XCircle, Hourglass, PauseCircle, Trash2, Play, Eye } from 'lucide-react'; 
  import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
  import { GameSchema, type Game } from '@/lib/firebaseTypes';
- import { collection, query, where, orderBy, limit, writeBatch, getDocs, doc, deleteDoc } from 'firebase/firestore'; 
+ import { collection, query, where, orderBy, limit, writeBatch, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore'; 
  import { getFirebase } from '@/firebase';
  import { Skeleton } from '@/components/ui/skeleton';
  import { Badge } from '@/components/ui/badge';
@@ -68,8 +68,12 @@ const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
       variant = "outline";
       text = "Quit";
       break;
+    case 'continue':
+        variant = "secondary";
+        text = "Paused";
+        break;
   }
-  return <Badge variant={variant} className={result === 'won' ? 'bg-green-500 hover:bg-green-600 text-white' : (result === 'in-progress' ? 'bg-yellow-500 text-black hover:bg-yellow-600' : '') }>{text}</Badge>;
+  return <Badge variant={variant} className={result === 'won' ? 'bg-green-500 hover:bg-green-600 text-white' : (result === 'in-progress' || result === 'continue' ? 'bg-yellow-500 text-black hover:bg-yellow-600' : '') }>{text}</Badge>;
 };
 
 
@@ -102,26 +106,21 @@ const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
     );
     
 
-    const handlePlayOrViewGame = (game: Game) => {
-      if (game.result === 'in-progress' && user && firestore) {
-        // Before navigating, update the game result to 'continue'
-        const gameDocRef = doc(firestore, 'games', game.id);
-
-        // Using set with merge:true to only update the 'result' field
-        // We could also use updateDoc, but set with merge:true is often simpler for a single field
-        //setDoc(gameDocRef, { result: 'continue' }, { merge: true })
-        router.push('/play?gameId=${game.id}');
-        /*
-        .then(() => {
-          console.log(`Game ${game.id} result updated to 'continue'`);
-        })
-        .catch((error) => {
-          console.error("Error updating game result:", error);
-          toast({ title: "Update Failed", description: "Could not mark game as continued.", variant: "destructive" });
-        }); */
-      } else if (game.result === 'won' || game.result === 'lost') {
-        router.push(`/history/game-review?gameId=${game.id}`);
-      } else if (game.result === 'quit') {
+    const handlePlayOrViewGame = async (game: Game) => {
+      if (!user || !firestore) {
+        toast({ title: "Error", description: "Cannot perform action.", variant: "destructive" });
+        return;
+      }
+      if (game.result === 'in-progress' || game.result === 'continue') {
+        try {
+          const gameDocRef = doc(firestore, 'games', game.id);
+          await updateDoc(gameDocRef, { result: 'continue' });
+          router.push(`/play?gameId=${game.id}`);
+        } catch (error) {
+          console.error("Error setting game to continue:", error);
+          toast({ title: "Error", description: "Could not prepare game for continuation.", variant: "destructive" });
+        }
+      } else if (game.result === 'won' || game.result === 'lost' || game.result === 'quit') {
         router.push(`/history/game-review?gameId=${game.id}`);
       }
     };
@@ -154,14 +153,22 @@ const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
       setIsClearing(true);
       try {
         const gamesCollectionRef = collection(firestore, 'games');
-        const q = query(gamesCollectionRef, where('userId', '==', user.uid));
-        const querySnapshot = await getDocs(q); // This needs to be updated to use targetUserId
+        // Query only for the target user's games
+        const q = query(gamesCollectionRef, where('userId', '==', targetUserId));
+        const querySnapshot = await getDocs(q);
         
-        if (querySnapshot.empty || targetUserId !== user?.uid) { // Prevent clearing another user's history
-            toast({ title: "No History", description: "There is no game history to clear." });
+        if (querySnapshot.empty) {
+            toast({ title: "No History", description: "There is no game history to clear for this user." });
             setIsClearing(false);
             return;
         }
+        // Ensure one can only clear their own history
+        if (targetUserId !== user.uid) {
+            toast({ title: "Permission Denied", description: "You can only clear your own game history.", variant: "destructive"});
+            setIsClearing(false);
+            return;
+        }
+
 
         const batch = writeBatch(firestore);
         querySnapshot.forEach((doc) => {
@@ -169,7 +176,7 @@ const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
         });
         await batch.commit();
         toast({ title: "History Cleared", description: "Your game history has been successfully deleted." });
-        refetchGames(); // This needs to be updated to use targetUserId
+        refetchGames();
       } catch (error: any) {
         console.error("Error clearing history:", error);
         let description = "Could not clear your game history. Please try again.";
@@ -226,7 +233,7 @@ const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
    return (
      <AppLayout>
        <div className="container mx-auto p-4 md:p-8">
-         {!user ? ( 
+         {!user && targetUserId && !userIdFromUrl ? (  // Viewing own history as guest (targetUserId will be undefined if not logged in & no URL id)
            <div className="flex flex-col items-center justify-center text-center">
              <History className="h-16 w-16 text-muted-foreground mb-4" />
              <h1 className="text-2xl font-bold text-foreground mb-3">View Game History</h1>
@@ -279,9 +286,9 @@ const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
                  <CardHeader>
                       {/* Dynamic Title */}
                      <CardTitle>
-                         {userIdFromUrl && user?.uid !== userIdFromUrl
-                             ? `${targetUserName}'s Match History`
-                             : 'Your Match History'}
+                         {targetUserId === user?.uid
+                             ? 'Your Match History'
+                             : `${targetUserName}'s Match History`}
                      </CardTitle>
                      <CardDescription>
                          Review details of past and ongoing Minesweeper games.
@@ -324,27 +331,31 @@ const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
                     )}
                     {!gamesLoading && !gamesError && games.length === 0 && (
                          <div className="text-center text-muted-foreground py-10">
-                             <p>Your game history is empty.</p>
-                             <p className="mt-2">Play some games to see your history!</p>
-                             <Button className="mt-4" onClick={() => router.push('/play')}>Play Now</Button>
+                             <p>{targetUserId === user?.uid ? "Your" : `${targetUserName}'s`} game history is empty.</p>
+                            {targetUserId === user?.uid && <p className="mt-2">Play some games to see your history!</p>}
+                             {targetUserId === user?.uid && <Button className="mt-4" onClick={() => router.push('/play')}>Play Now</Button>}
                          </div>
                     )}
                     {!gamesLoading && !gamesError && games.length > 0 && (
                         <ul className="divide-y divide-border">
                             {games.filter(game => {
-                                // Filter for games belonging to the current user
-                                const isCurrentUserGame = game.userId === user?.uid;
-                                // Filter for games with at least one revealed cell
-                                let hasRevealedCell = false;
-                                try {
-                                  const parsedGameState = JSON.parse(game.gameState as string);
-                                   if (Array.isArray(parsedGameState)) {
-                                      hasRevealedCell = parsedGameState.some(row => Array.isArray(row) && row.some(cell => cell.isRevealed));
-                                   }
-                                } catch (e) {
-                                   console.error("Failed to parse gameState for game", game.id, e);
+                                // For guest, no games will be shown as userId won't match
+                                // For logged-in user viewing own history, game.userId === user.uid
+                                // For logged-in user viewing other's history, game.userId === targetUserId
+                                if (!targetUserId) return false; // Should not happen if user is logged in or targetId is from URL
+                                
+                                const isTargetUserGame = game.userId === targetUserId;
+                                
+                                // Always show 'won', 'lost', 'quit' games for the target user
+                                if (game.result === 'won' || game.result === 'lost' || game.result === 'quit') {
+                                    return isTargetUserGame;
                                 }
-                                return isCurrentUserGame && hasRevealedCell;
+                                // For 'in-progress' or 'continue' games, only show if it's the current user's own game OR if viewing other's history and they allow it (future enhancement)
+                                // For now, show all 'in-progress' or 'continue' for the target user
+                                if (game.result === 'in-progress' || game.result === 'continue') {
+                                    return isTargetUserGame;
+                                }
+                                return false; // Default to not showing if none of above conditions met
                             }).map(game => ({
                                     ...game,
                                     moves: game.moves?.filter(move => typeof move.action === 'string' && move.action !== '') || [] // Filter out moves with invalid actions
@@ -369,7 +380,7 @@ const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
                                                             }
                                                         })()
                                                     : 'N/A'
-                                                : (game.result === 'in-progress' ? 'In Progress' : (game.result === 'quit' ? 'Quit' : 'N/A'))
+                                                : (game.result === 'in-progress' || game.result === 'continue' ? 'In Progress' : (game.result === 'quit' ? 'Quit' : 'N/A'))
                                                 }
 
                                             </p>
@@ -384,14 +395,15 @@ const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
                                           variant="outline" 
                                           size="sm" 
                                           onClick={() => handlePlayOrViewGame(game)}
-                                          disabled={isDeleting === game.id || isClearing}
+                                          disabled={isDeleting === game.id || isClearing || (game.result !== 'in-progress' && game.result !== 'continue' && game.result !== 'won' && game.result !== 'lost' && game.result !== 'quit')}
                                           title={
-                                            game.result === 'in-progress' ? "Continue this game" :
-                                            (game.result === 'quit' ? "Game was quit" : "Review Game")
+                                            (game.result === 'in-progress' || game.result === 'continue') && game.userId === user?.uid ? "Continue this game" :
+                                            (game.result === 'in-progress' || game.result === 'continue') && game.userId !== user?.uid ? "Cannot continue friend's game" :
+                                            (game.result === 'quit' ? "Game was quit - View Details" : "Review Game")
                                           }
                                       >
-                                          {game.result === 'in-progress' ? <Play className="mr-1 h-4 w-4" /> : <Eye className="mr-1 h-4 w-4" /> }
-                                          {game.result === 'in-progress' ? 'Continue' : (game.result === 'quit' ? 'Details' : 'Review')}
+                                          {(game.result === 'in-progress' || game.result === 'continue') && game.userId === user?.uid ? <Play className="mr-1 h-4 w-4" /> : <Eye className="mr-1 h-4 w-4" /> }
+                                          {(game.result === 'in-progress' || game.result === 'continue') && game.userId === user?.uid ? 'Continue' : (game.result === 'quit' ? 'Details' : 'Review')}
                                      </Button>
                                       {targetUserId === user?.uid && ( // Conditionally render delete button for own history
                                           <AlertDialog>
