@@ -10,7 +10,7 @@ import GameBoard, { type GameBoardRef, type InternalGameStatus } from '@/compone
 import { DIFFICULTY_LEVELS, type DifficultyKey } from '@/config/minesweeperSettings';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Save, LogOutIcon, RotateCcw } from 'lucide-react';
+import { Save, LogOutIcon, RotateCcw, Lightbulb } from 'lucide-react';
 import { useToast } from '@/components/ui/toaster';
 import { getFirebase } from '@/firebase';
 import { doc, setDoc, Timestamp, collection, updateDoc, query, where, getDocs, writeBatch, limit, orderBy, deleteDoc, getDoc } from 'firebase/firestore';
@@ -27,6 +27,8 @@ const nonJsonGameStates = [
   "AUTO_QUIT_MULTIPLE_IN_PROGRESS",
 ];
 
+const INITIAL_HINT_COUNT = 3;
+
 export default function PlayPage() {
   const [selectedDifficultyKey, setSelectedDifficultyKey] = useState<DifficultyKey>('medium');
   const [gameKey, setGameKey] = useState<number>(0); // Used to force GameBoard re-mount
@@ -35,20 +37,19 @@ export default function PlayPage() {
   const { firestore } = getFirebase();
   const { toast } = useToast();
   const router = useRouter();
-  const searchParams = useSearchParams(); // For reading URL params
+  const searchParams = useSearchParams(); 
 
-  const [isSavingOrStarting, setIsSavingOrStarting] = useState(false); // Generic loading state for DB operations
+  const [isSavingOrStarting, setIsSavingOrStarting] = useState(false); 
   const gameBoardRef = useRef<GameBoardRef>(null);
 
-  // State for the currently active game's data from Firestore
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
   const [gameData, setGameData] = useState<Game | null>(null);
-  const [gameResolved, setGameResolved] = useState(false); // True if game ended (won/lost/quit)
-  const [gameStatusFromBoard, setGameStatusFromBoard] = useState<string | null>(null); // Status from GameBoard callbacks
+  const [gameResolved, setGameResolved] = useState(false); 
+  const [gameStatusFromBoard, setGameStatusFromBoard] = useState<string | null>(null); 
+  const [hintsRemaining, setHintsRemaining] = useState<number>(INITIAL_HINT_COUNT);
   
-  const [initialGameLoadAttempted, setInitialGameLoadAttempted] = useState(false); // Ensure load logic runs once
+  const [initialGameLoadAttempted, setInitialGameLoadAttempted] = useState(false); 
 
-  // Refs to hold current values for use in cleanup effects or callbacks
   const activeGameIdRef = useRef(activeGameId);
   const gameDataRef = useRef(gameData);
   const gameResolvedRef = useRef(gameResolved);
@@ -57,29 +58,26 @@ export default function PlayPage() {
   useEffect(() => { gameDataRef.current = gameData; }, [gameData]);
   useEffect(() => { gameResolvedRef.current = gameResolved; }, [gameResolved]);
 
-  // Game Loading Logic (handles URL param and latest 'continue' game)
   useEffect(() => {
     if (!user || !firestore || initialGameLoadAttempted) {
-      if (!user && !initialGameLoadAttempted) { // If user logs out, allow reloading for guest or new user
+      if (!user && !initialGameLoadAttempted) { 
           setInitialGameLoadAttempted(false);
-          // Reset game state if user logs out
           setActiveGameId(null);
           setGameData(null);
           setShowBoard(false);
-          setGameResolved(true); // No active game
+          setGameResolved(true); 
       }
       return;
     }
 
     const loadGame = async () => {
       setIsSavingOrStarting(true);
-      setInitialGameLoadAttempted(true); // Mark that we've started an attempt
+      setInitialGameLoadAttempted(true); 
       const gameIdFromUrl = searchParams.get('gameId');
 
       let gameToLoad: Game | null = null;
       let gameToLoadId: string | null = null;
 
-      // 1. Try loading game from URL parameter
       if (gameIdFromUrl) {
         try {
           const gameDocRef = doc(firestore, 'games', gameIdFromUrl);
@@ -92,8 +90,10 @@ export default function PlayPage() {
               toast({title: "Continuing Game", description: `Loaded game ${gameIdFromUrl.substring(0,6)} from URL.`});
             } else if (data.userId !== user.uid) {
                 toast({title: "Access Denied", description: "This game belongs to another user.", variant: "destructive"});
+            } else if (data.result !== 'continue' && data.result !== 'in-progress') {
+                 toast({title: "Game Not Continuable", description: `Game ${gameIdFromUrl.substring(0,6)} has ended: ${data.result}. Starting new.`, variant: "default"});
             } else {
-                 toast({title: "Game Not Continuable", description: `Game ${gameIdFromUrl.substring(0,6)} has ended.`, variant: "default"});
+                 toast({title: "Game Not Found", description: `Game ${gameIdFromUrl.substring(0,6)} not found or invalid.`, variant: "destructive"});
             }
           } else {
             toast({title: "Game Not Found", description: `Game with ID ${gameIdFromUrl.substring(0,6)} not found.`, variant: "destructive"});
@@ -102,11 +102,9 @@ export default function PlayPage() {
           console.error("Error loading game by ID from URL:", error);
           toast({ title: "Error Loading Game", description: "Could not load the game specified in the URL.", variant: "destructive" });
         }
-        // Clear the URL parameter after attempting to load
         router.replace('/play', { scroll: false });
       }
 
-      // 2. If no game from URL, try loading the latest 'continue' game
       if (!gameToLoad) {
         const gamesCollectionRef = collection(firestore, 'games');
         const q = query(
@@ -129,9 +127,7 @@ export default function PlayPage() {
         }
       }
 
-      // 3. Process the game if one was found
       if (gameToLoad && gameToLoadId) {
-        // If there was a different game active locally, mark it as 'quit'
         if (activeGameIdRef.current && activeGameIdRef.current !== gameToLoadId && !gameResolvedRef.current) {
           try {
             const oldGameDocRef = doc(firestore, 'games', activeGameIdRef.current);
@@ -141,11 +137,10 @@ export default function PlayPage() {
           }
         }
 
-        // Update the loaded game's result to 'in-progress'
         try {
           const gameDocRef = doc(firestore, 'games', gameToLoadId);
           await updateDoc(gameDocRef, { result: 'in-progress' });
-          gameToLoad.result = 'in-progress'; // Update local copy
+          gameToLoad.result = 'in-progress'; 
           
           setGameData(gameToLoad);
           setActiveGameId(gameToLoadId);
@@ -155,21 +150,16 @@ export default function PlayPage() {
           setSelectedDifficultyKey(difficultyKey || 'medium');
           setShowBoard(true);
           setGameResolved(false);
-          setGameKey(prevKey => prevKey + 1); // Force GameBoard re-mount
+          setHintsRemaining(INITIAL_HINT_COUNT); // Reset hints for loaded game
+          setGameKey(prevKey => prevKey + 1); 
         } catch (error) {
           console.error("Error setting loaded game to 'in-progress':", error);
           toast({ title: "Error Resuming", description: "Could not update game status to active.", variant: "destructive" });
-           // If update fails, revert initialGameLoadAttempted so it tries again if user interacts
           setInitialGameLoadAttempted(false);
         }
       } else {
-        // No game to load from URL or as 'continue'.
-        // If a game was already active on the board (e.g. user just started one), don't clear it.
-        // Only reset if no game is active.
         if (!activeGameIdRef.current) {
-            // setActiveGameId(null); // Already null
-            // setGameData(null); // Already null
-            // setShowBoard(false); // Keep it hidden unless explicitly started
+            // setShowBoard(false); // Do not hide if a game was manually started
         }
       }
       setIsSavingOrStarting(false);
@@ -177,9 +167,8 @@ export default function PlayPage() {
 
     loadGame();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid, firestore, searchParams, initialGameLoadAttempted]); // initialGameLoadAttempted is key here
+  }, [user?.uid, firestore, searchParams, initialGameLoadAttempted]); 
 
-  // Unmount Logic: Save 'in-progress' game as 'continue'
   useEffect(() => {
     return () => {
       if (user && firestore && activeGameIdRef.current && gameDataRef.current?.result === 'in-progress') {
@@ -190,8 +179,6 @@ export default function PlayPage() {
             result: 'continue',
             gameState: boardState,
             lastSavedTime: Timestamp.now(),
-          }).then(() => {
-            // console.log(`Game ${activeGameIdRef.current} marked as 'continue' on unmount.`);
           }).catch(error => {
             console.error("Error saving game as 'continue' on unmount:", error);
           });
@@ -199,13 +186,14 @@ export default function PlayPage() {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, firestore]); // Only depends on user and firestore availability
+  }, [user, firestore]); 
 
 
   const handleStartGame = async () => {
     setIsSavingOrStarting(true);
     setGameResolved(false); 
     setGameStatusFromBoard('ready'); 
+    setHintsRemaining(INITIAL_HINT_COUNT);
 
     if (user && activeGameIdRef.current && firestore && !gameResolvedRef.current) {
         try {
@@ -237,8 +225,7 @@ export default function PlayPage() {
     }
 
     const newGameDocRef = doc(collection(firestore, 'games'));
-    const newGameEntry: Game = {
-      id: newGameDocRef.id, 
+    const newGameEntry: Omit<Game, 'id'> = { 
       userId: user.uid,
       startTime: Timestamp.now(),
       endTime: null,
@@ -249,19 +236,18 @@ export default function PlayPage() {
     };
 
     try {
-      const { id, ...gameDataForFirestore } = newGameEntry;
-      await setDoc(newGameDocRef, gameDataForFirestore);
-      setGameData(newGameEntry); 
-      setActiveGameId(newGameEntry.id); 
-      setInitialGameLoadAttempted(true); // A game is now active, further auto-loads for 'continue' should be skipped for this session unless forced
-      toast({ title: "New Game Started", description: `Difficulty: ${newGameEntry.difficulty}`});
+      await setDoc(newGameDocRef, newGameEntry);
+      setGameData({id: newGameDocRef.id, ...newGameEntry}); 
+      setActiveGameId(newGameDocRef.id); 
+      setInitialGameLoadAttempted(true);
+      toast({ title: "New Game Started", description: `Difficulty: ${DIFFICULTY_LEVELS[selectedDifficultyKey].name}`});
     } catch (error) {
       console.error("Error creating new game:", error);
       toast({ title: "Error Starting Game", description: "Could not create a new game record.", variant: "destructive" });
       setShowBoard(false);
       setActiveGameId(null);
       setGameData(null);
-      setInitialGameLoadAttempted(false); // Allow retry on next interaction if start failed
+      setInitialGameLoadAttempted(false); 
     } finally {
       setIsSavingOrStarting(false);
     }
@@ -274,13 +260,20 @@ export default function PlayPage() {
     const gameDocRef = doc(firestore, 'games', activeGameIdRef.current);
     const move = { action: moveType, x, y, timestamp: Timestamp.now() };
     try {
-      await updateDoc(gameDocRef, { moves: arrayUnion(move) });
+      // Only add move if x,y are valid (not -1 from a programmatic trigger if we had one)
+      if (x >= 0 && y >= 0) {
+        await updateDoc(gameDocRef, { moves: arrayUnion(move) });
+      }
       if (gameBoardRef.current) {
         const currentBoardState = gameBoardRef.current.getCurrentBoardState();
         await updateDoc(gameDocRef, { gameState: currentBoardState, lastSavedTime: Timestamp.now() });
       }
     } catch (error) {
       console.error("Error logging move to Firestore:", error);
+       if (error instanceof Error && error.message.includes("No document to update")) {
+          toast({ title: "Sync Error", description: "Game not found in DB for move. Please restart game.", variant: "destructive" });
+          // Optionally, try to re-create the game or guide user
+        }
     }
   }, [user, firestore]); 
 
@@ -300,6 +293,7 @@ export default function PlayPage() {
     setGameData(null);      
     setActiveGameId(null);  
     setGameStatusFromBoard('ready');
+    setHintsRemaining(INITIAL_HINT_COUNT);
     await handleStartGame();
   };
 
@@ -405,6 +399,26 @@ export default function PlayPage() {
     }
   };
 
+  const handleRequestHint = () => {
+    const isGameActiveForHint = showBoard && !gameResolvedRef.current && gameStatusFromBoard === 'playing';
+    if (!isGameActiveForHint) {
+      toast({ title: "Hint Unavailable", description: "Hints can only be used during active gameplay.", variant: "default" });
+      return;
+    }
+
+    if (hintsRemaining > 0) {
+      const hintGiven = gameBoardRef.current?.requestHint(); 
+      if (hintGiven) { 
+        setHintsRemaining(prev => prev - 1);
+        toast({ title: "Hint Used!", description: `You have ${hintsRemaining - 1} hints left.` });
+      } else {
+        toast({ title: "No Hint Available", description: "Could not find a suitable cell to reveal.", variant: "default" });
+      }
+    } else { 
+      toast({ title: "No More Hints", description: "You've used all your hints for this game.", variant: "destructive" });
+    }
+  };
+
   const handleBeforeUnload = useCallback((event: BeforeUnloadEvent) => {
       if (user && activeGameIdRef.current && !gameResolvedRef.current && firestore && gameBoardRef.current) {
         event.preventDefault();
@@ -433,7 +447,7 @@ export default function PlayPage() {
     : undefined;
 
   const timeToRestore = (gameData?.result === 'in-progress' || gameData?.result === 'continue') && gameData.startTime
-    ? 0 // For now, timer resets on continue or new in-progress load
+    ? 0 
     : (gameData?.endTime && gameData?.startTime ? Math.round((gameData.endTime.toDate().getTime() - gameData.startTime.toDate().getTime())/1000) : 0);
 
 
@@ -469,6 +483,7 @@ export default function PlayPage() {
                     setGameResolved(true); 
                     setGameStatusFromBoard(null);
                     setSelectedDifficultyKey(value as DifficultyKey);
+                    setHintsRemaining(INITIAL_HINT_COUNT);
                 }}                
                 disabled={isSavingOrStarting}
               >
@@ -494,7 +509,7 @@ export default function PlayPage() {
                 }
             >
               {(showBoard && activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name && gameData?.result === 'in-progress')
-                ? 'Restart Current'
+                ? 'New Game' // Changed from 'Restart Current' to 'New Game' for clarity
                 : 'Start Game'}
             </Button>
           </CardContent>
@@ -528,6 +543,15 @@ export default function PlayPage() {
             <CardFooter className="flex flex-col sm:flex-row justify-around gap-2 pt-4">
               <Button variant="outline" onClick={handleRestartGame} className="w-full sm:w-auto" disabled={isSavingOrStarting}>
                 <RotateCcw className="mr-2 h-4 w-4" /> Restart
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={handleRequestHint} 
+                className="w-full sm:w-auto"
+                disabled={isSavingOrStarting || gameResolvedRef.current || hintsRemaining <= 0 || gameStatusFromBoard !== 'playing'}
+                title={hintsRemaining <=0 ? "No hints left" : (gameStatusFromBoard !== 'playing' ? "Hint unavailable" : `Use Hint (${hintsRemaining} left)`)}
+              >
+                <Lightbulb className="mr-2 h-4 w-4" /> Hint ({hintsRemaining})
               </Button>
               <Button
                 variant="destructive"

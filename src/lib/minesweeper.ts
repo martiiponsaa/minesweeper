@@ -236,3 +236,28 @@ export const getRemainingMines = (board: BoardState, totalMines: number): number
   return totalMines - flagsPlaced;
 };
 
+export const findSafeHintCell = (board: BoardState, rows: number, cols: number): { x: number; y: number } | null => {
+  const safeNumberedCells: { x: number; y: number }[] = [];
+  const safeEmptyCells: { x: number; y: number }[] = [];
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const cell = board[y][x];
+      if (!cell.isMine && !cell.isRevealed && !cell.isFlagged) {
+        if (cell.adjacentMines > 0) {
+          safeNumberedCells.push({ x, y });
+        } else {
+          safeEmptyCells.push({ x, y });
+        }
+      }
+    }
+  }
+
+  if (safeNumberedCells.length > 0) {
+    return safeNumberedCells[Math.floor(Math.random() * safeNumberedCells.length)];
+  }
+  if (safeEmptyCells.length > 0) {
+    return safeEmptyCells[Math.floor(Math.random() * safeEmptyCells.length)];
+  }
+  return null; // No safe hint cell found
+};

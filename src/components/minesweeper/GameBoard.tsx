@@ -11,7 +11,8 @@ import {
   checkWinCondition,
   getRemainingMines,
   calculateAdjacentMines,
-  placeMinesAndRevealFirstArea, 
+  placeMinesAndRevealFirstArea,
+  findSafeHintCell, 
 } from '@/lib/minesweeper';
 import { DIFFICULTY_LEVELS, type DifficultyKey, type DifficultySetting } from '@/config/minesweeperSettings';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,7 @@ export interface GameBoardRef {
   getCurrentTimeElapsed: () => number;
   resetBoardToInitial: () => void; 
   calculateTimeFromStart: (startTime: Timestamp) => number;
+  requestHint: () => boolean;
 }
 
 const nonJsonGameStates = [
@@ -75,7 +77,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
   
   const [board, setBoard] = useState<BoardState>(() => {
     const currentDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
-    if (initialBoardState && !nonJsonGameStates.includes(initialBoardState) && !reviewMode) {
+    if (initialBoardState && !nonJsonGameStates.includes(initialBoardState)) { // Allow loading initial state if not in review mode or if it's a valid JSON
       try {
         const parsedBoard = JSON.parse(initialBoardState) as BoardState;
         if (Array.isArray(parsedBoard) && parsedBoard.length > 0 && Array.isArray(parsedBoard[0])) {
@@ -101,34 +103,25 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
   });
 
   const [gameStatus, setGameStatus] = useState<GameStatus>(() => {
-    if (reviewMode && initialBoardState && !nonJsonGameStates.includes(initialBoardState)) { 
+    if (initialBoardState && !nonJsonGameStates.includes(initialBoardState)) { 
         try {
             const parsedBoard = JSON.parse(initialBoardState) as BoardState;
-             if (checkWinCondition(parsedBoard, DIFFICULTY_LEVELS[difficultyKey].rows, DIFFICULTY_LEVELS[difficultyKey].cols, DIFFICULTY_LEVELS[difficultyKey].mines)) {
+            const currentDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
+             if (checkWinCondition(parsedBoard, currentDifficultySettings.rows, currentDifficultySettings.cols, currentDifficultySettings.mines)) {
                 return 'won';
             }
             if (parsedBoard.some(row => row.some(cell => cell.isMine && cell.isRevealed && cell.exploded))) {
                 return 'lost';
             }
-        } catch(e) { /* ignore parsing error for review status */ }
-        return 'playing'; 
-    }
-    if (initialBoardState && !nonJsonGameStates.includes(initialBoardState) && !reviewMode) {
-        try {
-            const parsedBoard = JSON.parse(initialBoardState) as BoardState;
-            const currentDifficultySettings = DIFFICULTY_LEVELS[difficultyKey];
-            if (parsedBoard.some(row => row.some(cell => cell.isMine && cell.isRevealed && cell.exploded))) {
-                 return 'lost';
-            }
-            if (checkWinCondition(parsedBoard, currentDifficultySettings.rows, currentDifficultySettings.cols, currentDifficultySettings.mines)) {
-                return 'won';
-            }
-            return 'playing'; 
-        } catch (e) {
-            // Fallback
+            // If board is loaded, it's 'playing' unless already won/lost.
+            const isBoardUntouched = parsedBoard.every(row => row.every(cell => !cell.isRevealed && !cell.isFlagged));
+            return isBoardUntouched && !reviewMode ? 'ready' : 'playing';
+        } catch(e) { 
+            console.error("Error determining initial game status from board state:", e);
+            return reviewMode ? 'playing' : 'ready';
         }
     }
-    return 'ready'; 
+    return reviewMode ? 'playing' : 'ready'; 
   });
 
   const [minesRemaining, setMinesRemaining] = useState<number>(() => {
@@ -180,29 +173,7 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
     let resolvedByLoad = false;
     let timeToSet = initialTimeElapsed > 0 ? initialTimeElapsed : 0;
 
-    if (reviewMode && initialBoardState && !nonJsonGameStates.includes(initialBoardState)) {
-        try {
-            const parsedBoardForReview = JSON.parse(initialBoardState) as BoardState;
-            if (parsedBoardForReview.length === newDifficultySettings.rows && parsedBoardForReview[0].length === newDifficultySettings.cols) {
-                boardToSet = calculateAdjacentMines(parsedBoardForReview, newDifficultySettings.rows, newDifficultySettings.cols);
-                if (checkWinCondition(boardToSet, newDifficultySettings.rows, newDifficultySettings.cols, newDifficultySettings.mines)) {
-                    statusToSet = 'won';
-                } else if (boardToSet.some(row => row.some(cell => cell.isMine && cell.isRevealed && cell.exploded))) {
-                    statusToSet = 'lost';
-                } else {
-                    statusToSet = 'playing';
-                }
-            } else {
-                 console.warn("Review mode: initialBoardState dimensions mismatch, showing empty board.");
-                 boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
-                 statusToSet = 'playing'; 
-            }
-        } catch (e) {
-            console.error("Error parsing initialBoardState for review mode:", e);
-            boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
-            statusToSet = 'playing';
-        }
-    } else if (initialBoardState && !nonJsonGameStates.includes(initialBoardState) && !reviewMode) {
+    if (initialBoardState && !nonJsonGameStates.includes(initialBoardState)) {
         try {
             const parsedBoardInput = JSON.parse(initialBoardState) as BoardState;
              if (Array.isArray(parsedBoardInput) && parsedBoardInput.length > 0 && Array.isArray(parsedBoardInput[0]) &&
@@ -216,35 +187,37 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
 
                 if (boardToSet.some(row => row.some(cell => cell.isMine && cell.isRevealed && cell.exploded))) {
                     statusToSet = 'lost';
-                    resolvedByLoad = true;
+                    resolvedByLoad = !reviewMode; // Only mark as resolved by load if not in review mode
                 } else if (checkWinCondition(boardToSet, newDifficultySettings.rows, newDifficultySettings.cols, newDifficultySettings.mines)) {
                     statusToSet = 'won';
-                    resolvedByLoad = true;
+                    resolvedByLoad = !reviewMode;
                 } else {
-                   statusToSet = 'playing'; 
+                   // If not won or lost, it's 'playing' if any cell is revealed/flagged, else 'ready' (for non-review)
+                   const isBoardAltered = parsedBoardInput.some(row => row.some(cell => cell.isRevealed || cell.isFlagged));
+                   statusToSet = reviewMode ? 'playing' : (isBoardAltered ? 'playing' : 'ready');
                 }
             } else {
-                 console.warn("Parsed initialBoardState structure/dimensions mismatch, falling back to new board for play mode.");
+                 console.warn("Parsed initialBoardState structure/dimensions mismatch, falling back to new board.");
                  boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
-                 statusToSet = 'ready';
+                 statusToSet = reviewMode ? 'playing' : 'ready';
                  timeToSet = 0; 
             }
         } catch (e) {
-            console.error("Error processing initialBoardState, falling back to new board for play mode:", e);
+            console.error("Error processing initialBoardState, falling back to new board:", e);
             boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
-            statusToSet = 'ready';
+            statusToSet = reviewMode ? 'playing' : 'ready';
             timeToSet = 0;
         }
     } else { 
         boardToSet = createInitialBoard(newDifficultySettings.rows, newDifficultySettings.cols);
-        statusToSet = 'ready';
+        statusToSet = reviewMode ? 'playing' : 'ready';
         timeToSet = 0; 
     }
 
     setBoard(boardToSet);
     setMinesRemaining(getRemainingMines(boardToSet, newDifficultySettings.mines));
     setGameStatus(statusToSet);
-    setIsGameResolvedByLoad(resolvedByLoad && !reviewMode);
+    setIsGameResolvedByLoad(resolvedByLoad);
     
     let currentRevealedCount = 0;
     boardToSet.forEach(row => row.forEach(cell => {
@@ -366,37 +339,30 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
       return; // Prevent actions if game is over or in review mode
     }
 
+    let currentBoard = board;
     // Allow flagging even if gameStatus is 'ready', then transition to 'playing'
     if (gameStatus === 'ready') {
-      // When flagging is the first action, mines are not yet placed.
-      // We need to place mines ensuring the flagged cell (and its area if desired) is safe
-      // or simply place mines randomly and then apply the flag.
-      // For simplicity, let's place mines randomly but NOT reveal the area, then apply the flag.
-      // This means the first *flag* doesn't guarantee a safe spot or reveal anything.
-      const boardWithMines = placeMinesAndRevealFirstArea(
+      const { newBoard: boardAfterMinePlacement } = placeMinesAndRevealFirstArea(
         board,
         difficulty.rows,
         difficulty.cols,
         difficulty.mines,
-        x, // Provide x,y of flag, but it won't be revealed
-        y
-      ).newBoard.map(row => row.map(cell => ({...cell, isRevealed: false }))); // Ensure no cells are revealed by this hidden placement
-      
-      const finalBoardState = toggleFlag(boardWithMines, x, y);
-      setBoard(finalBoardState);
-      setMinesRemaining(getRemainingMines(finalBoardState, difficulty.mines)); // Update remaining mines
+        x, // Provide x,y of flag, but it won't be revealed immediately
+        y,
+      );
+      // Important: We don't want to reveal cells on a flag-first action.
+      // So, we take the boardWithMines but ensure all cells remain unrevealed initially.
+      currentBoard = boardAfterMinePlacement.map(row => row.map(cell => ({...cell, isRevealed: false, exploded: false })));
       setGameStatus('playing'); // Transition to playing
-
-    } else { // gameStatus is 'playing'
-      const finalBoardState = toggleFlag(board, x, y);
-      setBoard(finalBoardState);
-      setMinesRemaining(getRemainingMines(finalBoardState, difficulty.mines)); // Update remaining mines
     }
     
+    const finalBoardState = toggleFlag(currentBoard, x, y);
+    setBoard(finalBoardState);
+    setMinesRemaining(getRemainingMines(finalBoardState, difficulty.mines));
+    
     if (activeGameId && onMoveMade) {
-      // We need to determine if it was a flag or unflag action based on the board state *after* toggleFlag
-      const cellAfterToggle = board.find(row => row.find(c => c.x === x && c.y === y));
-      if(cellAfterToggle && board[y][x].isFlagged) { // Check the state on the *updated* board
+      const cellAfterToggle = finalBoardState[y][x];
+      if(cellAfterToggle.isFlagged) {
          onMoveMade("flag", x, y);
       } else {
          onMoveMade("unflag", x, y);
@@ -439,7 +405,19 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
         const now = Math.floor(Date.now() / 1000); 
         const startSeconds = startTime.seconds;
         return Math.max(0, now - startSeconds);
-    }
+    },
+    requestHint: () => {
+      if (gameStatus !== 'playing' || reviewMode) return false;
+
+      const hintCell = findSafeHintCell(board, difficulty.rows, difficulty.cols);
+      if (hintCell) {
+        // Simulate a click on the hint cell. This will use existing reveal logic
+        // and trigger onMoveMade if applicable.
+        handleCellClick(hintCell.x, hintCell.y);
+        return true; // Indicated a hint was actioned
+      }
+      return false; // No suitable hint found
+    },
   }));
 
 
@@ -504,7 +482,12 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
             </AlertDialogCancel>
             <AlertDialogAction onClick={() => {
               setShowDialog(false); 
-              router.push(`/history/game-review?gameId=${activeGameId}`);
+              if (activeGameId) { // Ensure activeGameId is available
+                router.push(`/history/game-review?gameId=${activeGameId}`);
+              } else {
+                // Handle case where activeGameId is null, maybe show a toast or fallback
+                console.warn("Cannot review game: activeGameId is null.");
+              }
             }}>
               Review
             </AlertDialogAction>
