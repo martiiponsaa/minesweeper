@@ -29,7 +29,7 @@ const nonJsonGameStates = [
   "AUTO_QUIT_MULTIPLE_IN_PROGRESS",
 ];
 
-export default function PlayPage() {
+export default function PlayPage() { 
   const [selectedDifficultyKey, setSelectedDifficultyKey] = useState<DifficultyKey>('medium');
   const [gameKey, setGameKey] = useState<number>(0); 
   const [showBoard, setShowBoard] = useState<boolean>(false);
@@ -40,7 +40,8 @@ export default function PlayPage() {
   const gameBoardRef = useRef<GameBoardRef>(null);
   const [isNewGameDialogOpen, setIsNewGameDialogOpen] = useState(false);
   const [selectedNewGameDifficulty, setSelectedNewGameDifficulty] = useState<DifficultyKey>('medium');
-  
+  const router = useRouter();
+
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
   const [gameResolved, setGameResolved] = useState(false); 
   const [gameData, setGameData] = useState<Game | null>(null); 
@@ -104,7 +105,10 @@ export default function PlayPage() {
                         const gameDoc = querySnapshot.docs[0]; const { GameSchema } = require('@/lib/firebaseTypes');
                         const loadedGame = GameSchema.parse({ id: gameDoc.id, ...gameDoc.data() }) as Game;
 
+                        console.log("Loaded game with result:", loadedGame.result);
+
                         if (loadedGame.result === 'continue') { // Only load if marked as 'continue'
+                            console.log("Game result is 'continue'. Updating to 'in-progress' and loading.");
                             // Update result to 'in-progress' before loading
                             await updateDoc(doc(firestore, 'games', loadedGame.id), { result: 'in-progress' });
 
@@ -126,6 +130,9 @@ export default function PlayPage() {
                             setGameResolved(false);
                             toast({ title: "Game Loaded", description: "Your previous in-progress game has been loaded." });
                         } else {
+                            console.log("Game found but result is not 'continue' (it is: ", loadedGame.result, "). Not loading.");
+                            setGameData(null);
+                            setActiveGameId(null);
                             // If a game is found but not marked 'continue', do not load it
                             setGameData(null);
                             setActiveGameId(null);
@@ -412,6 +419,7 @@ export default function PlayPage() {
   };
 
   const handleGameEnd = async (status: InternalGameStatus, time: number, boardState: string) => {
+    console.log("handleGameEnd called with:", { status, time, boardState, user, activeGameId: activeGameIdRef.current, gameData: gameDataRef.current });
     setGameResolved(true);
     if (!user || !activeGameIdRef.current) { 
       // setShowBoard(false); // Don't hide board, user should see the final state
@@ -439,6 +447,7 @@ export default function PlayPage() {
       difficulty: gameDataRef.current?.difficulty || DIFFICULTY_LEVELS[selectedDifficultyKey].name,
     };
     
+    console.log("Final game data to save:", finalGameData);
     setGameData(prev => prev ? {...prev, ...finalGameData} : null);
 
     try {
@@ -457,7 +466,7 @@ export default function PlayPage() {
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (user && activeGameIdRef.current && !gameResolvedRef.current && firestore && gameBoardRef.current) {
-        handleSaveGame(true); 
+        //handleSaveGame(true); 
       }
     };
 
@@ -466,7 +475,7 @@ export default function PlayPage() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       if (user && activeGameIdRef.current && !gameResolvedRef.current && firestore && gameBoardRef.current) {
-         handleSaveGame(true);
+         //handleSaveGame(true);
       }
     };
   }, [user, firestore, handleSaveGame]); 

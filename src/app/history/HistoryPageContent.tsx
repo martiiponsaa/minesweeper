@@ -109,15 +109,16 @@ const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
 
         // Using set with merge:true to only update the 'result' field
         // We could also use updateDoc, but set with merge:true is often simpler for a single field
-        setDoc(gameDocRef, { result: 'continue' }, { merge: true })
+        //setDoc(gameDocRef, { result: 'continue' }, { merge: true })
+        router.push('/play?gameId=${game.id}');
+        /*
         .then(() => {
           console.log(`Game ${game.id} result updated to 'continue'`);
         })
         .catch((error) => {
           console.error("Error updating game result:", error);
           toast({ title: "Update Failed", description: "Could not mark game as continued.", variant: "destructive" });
-        });
-        router.push('/play');
+        }); */
       } else if (game.result === 'won' || game.result === 'lost') {
         router.push(`/history/game-review?gameId=${game.id}`);
       } else if (game.result === 'quit') {
@@ -330,8 +331,21 @@ const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
                     )}
                     {!gamesLoading && !gamesError && games.length > 0 && (
                         <ul className="divide-y divide-border">
-                            {games
-                                .map(game => ({
+                            {games.filter(game => {
+                                // Filter for games belonging to the current user
+                                const isCurrentUserGame = game.userId === user?.uid;
+                                // Filter for games with at least one revealed cell
+                                let hasRevealedCell = false;
+                                try {
+                                  const parsedGameState = JSON.parse(game.gameState as string);
+                                   if (Array.isArray(parsedGameState)) {
+                                      hasRevealedCell = parsedGameState.some(row => Array.isArray(row) && row.some(cell => cell.isRevealed));
+                                   }
+                                } catch (e) {
+                                   console.error("Failed to parse gameState for game", game.id, e);
+                                }
+                                return isCurrentUserGame && hasRevealedCell;
+                            }).map(game => ({
                                     ...game,
                                     moves: game.moves?.filter(move => typeof move.action === 'string' && move.action !== '') || [] // Filter out moves with invalid actions
                                 }))

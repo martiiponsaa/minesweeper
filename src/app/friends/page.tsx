@@ -180,6 +180,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
     };
 
     const deleteUser = async (friendId: string) => {
+         // Close the AlertDialog before proceeding with the delete operation
+        // This prevents the dialog from staying open after the action
+        const dialogElement = document.getElementById(`delete-friend-dialog-${friendId}`);
+        if (dialogElement) (dialogElement as any).close();
+
         if (!user || !firestore) {
             toast({ title: "Error", description: "Cannot delete friend. Ensure you are logged in.", variant: "destructive" });
             return;
@@ -305,7 +310,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
                                        </div>
                                     </div>
                                    <div className="flex items-center gap-2">
-                                        <Button variant="outline" size="sm" onClick={() => router.push(`/profile?id=${friend.id}`)} title="View Friend's Profile">
+                                        <Button variant="outline" size="sm" onClick={() => router.push(`/stats/compare?friendId=${friend.id}`)} title="Compare Stats">
+ <span data-ai-hint="button label">Compare Stats</span></Button>
+ <Button variant="outline" size="sm" onClick={() => router.push(`/profile?id=${friend.id}`)} title="View Friend's Profile">
                                             <Eye className="mr-1 h-4 w-4" /> Profile
                                         </Button>
                                         <AlertDialog>

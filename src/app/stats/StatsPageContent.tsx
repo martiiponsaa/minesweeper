@@ -8,12 +8,12 @@ import { where, orderBy } from 'firebase/firestore';
    ChartContainer,
    ChartTooltip,
    ChartTooltipContent,
- } from "@/components/ui/chart";
-  import { BarChart, CartesianGrid, XAxis, YAxis, Bar as RechartsBar, PieChart, Pie, Cell as RechartsCell, Legend as RechartsLegend, Tooltip as RechartsTooltip } from "recharts" 
+} from "@/components/ui/chart"; // Assuming this is your chart component wrapper
+  import { BarChart, CartesianGrid, XAxis, YAxis, Bar as RechartsBar, PieChart, Pie, Cell as RechartsCell, Legend as RechartsLegend, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts" 
  import { Button } from "@/components/ui/button";
  import { useRouter } from "next/navigation";
  import { BarChart3, History, CheckCircle2, XCircle, Hourglass, PauseCircle, Users } from 'lucide-react'; 
- import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
+import React, { useState, useEffect } from 'react'; // Import useState and useEffect
  import { GameSchema, type Game } from '@/lib/firebaseTypes';
  import { Skeleton } from '@/components/ui/skeleton';
  import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -22,6 +22,7 @@ import { where, orderBy } from 'firebase/firestore';
  import { useFirestoreDocument } from '@/hooks/useFirestoreDocument';
 import { ChevronLeft } from 'lucide-react';
  import { UserSchema, type User as UserType } from '@/lib/firebaseTypes';
+import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
 
 
  export default function StatsPageContent() {
@@ -32,12 +33,15 @@ import { ChevronLeft } from 'lucide-react';
     const targetUserId = userIdFromUrl && user?.uid !== userIdFromUrl ? userIdFromUrl : user?.uid;
 
     const { data: games, loading: gamesLoading, error: gamesError } = useFirestoreCollection<Game>(
-        'games',
+ 'games',
         GameSchema,
         targetUserId ? [where('userId', '==', targetUserId), orderBy('startTime', 'desc')] : [],
         !targetUserId // Disable if no target user ID
     );
     
+    // State for actions per game chart data
+    const [actionsPerGameChartData, setActionsPerGameChartData] = useState<{ index: number; id: string; difficulty?: string; result: string; actions: number; }[]>([]);
+
     const calculateStats = () => {
         if (!games || games.length === 0) {
             return {
@@ -78,11 +82,6 @@ import { ChevronLeft } from 'lucide-react';
                         if (!totalSolveTimePerDifficulty[game.difficulty]) totalSolveTimePerDifficulty[game.difficulty] = 0;
                         totalSolveTimePerDifficulty[game.difficulty] += (game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000;
                     }
-                }
-            }
-
-            if (game.difficulty) {
-                if (!difficultyCounts[game.difficulty]) {
                     difficultyCounts[game.difficulty] = { played: 0, wins: 0 };
                 }
                 difficultyCounts[game.difficulty].played++;
@@ -125,7 +124,32 @@ import { ChevronLeft } from 'lucide-react';
             name, played: data.played, wins: data.wins, avgSolveTime: avgSolveTimePerDifficulty[name] || 'N/A'
         }));
         
+        const actionsPerGameData: { id: string; difficulty?: string; result: string; actions: number }[] = [];
+        games.forEach(game => {
+            if ((game.result === 'won' || game.result === 'lost') && game.moves) {
+                actionsPerGameData.push({
+                    id: game.id,
+                    difficulty: game.difficulty,
+                    result: game.result,
+                    actions: game.moves.length,
+                });
+            }
+        });
+
+        // Sort actionsPerGameData by the number of actions for potentially better visualization
+        actionsPerGameData.sort((a, b) => a.actions - b.actions);
+
+        // Prepare data for actions per game chart - using index for X-axis for simplicity
+        const actionsPerGameChartData = actionsPerGameData.map((game, index) => ({
+ index: index + 1, // Use index as the identifier on the chart
+ id: game.id, // Keep id for tooltip
+ difficulty: game.difficulty,
+ result: game.result,
+ actions: game.actions,
+        }));
+
         const winLossData = [
+
             { name: 'Wins', value: wins, fill: 'hsl(var(--chart-1))' }, // Teal-like
             { name: 'Losses', value: losses, fill: 'hsl(var(--chart-3))' }, // Gold-like
         ];
@@ -133,13 +157,20 @@ import { ChevronLeft } from 'lucide-react';
         return { gamesPlayed, wins, losses, winRate, avgSolveTime, gamesByDifficulty, winLossData, avgSolveTimePerDifficulty };
     };
 
-    // Fetch the target user's data to display their name if viewing another user's profile
+    useEffect(() => {
+        if (games) {
+            const { actionsPerGameChartData } = calculateStats();
+            setActionsPerGameChartData(actionsPerGameChartData ?? []);
+        }
+    }, [games]);
+
+    // Fetch the target user's data to display their name if viewing another user's profile    const { data: targetUserData, loading: targetUserLoading, error: targetUserError } = useFirestoreDocument<UserType>(
     const { data: targetUserData, loading: targetUserLoading, error: targetUserError } = useFirestoreDocument<UserType>(
         'users',
         targetUserId, // Fetch data for the determined targetUserId
         UserSchema,
     );
-    const stats = calculateStats();
+    const stats = calculateStats(); // Calculate stats initially and on games change
      
     const chartConfig = {
        played: { label: "Played", color: "hsl(var(--primary))" }, 
