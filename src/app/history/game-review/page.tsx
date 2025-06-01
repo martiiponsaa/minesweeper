@@ -1,8 +1,9 @@
+
 // src/app/history/game-review/page.tsx
 'use client';
 
 import { GameSchema, type Game } from '@/lib/firebaseTypes';
-import type { BoardState, CellState } from '@/lib/minesweeper'; // CellState import
+import type { BoardState, CellState, DifficultySetting } from '@/lib/minesweeper'; // CellState import, DifficultySetting import
 import { createInitialBoard, revealCell, toggleFlag, calculateAdjacentMines } from '@/lib/minesweeper';
 import { DIFFICULTY_LEVELS, type DifficultyKey } from '@/config/minesweeperSettings';
 import { useSearchParams } from 'next/navigation';
@@ -10,7 +11,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Bomb } from 'lucide-react'; // Added Bomb
 import React from 'react';
 import GameBoard from '@/components/minesweeper/GameBoard';
 import { Button } from '@/components/ui/button';
@@ -31,9 +32,10 @@ import { addDoc, collection, Firestore, serverTimestamp } from "firebase/firesto
 import { useRouter } from 'next/navigation';
 import { useFirestoreDocument } from '@/hooks/useFirestoreDocument';
 import { UserSchema, type User } from '@/lib/firebaseTypes';
-import { useAuth } from '@/hooks/useAuth'; // Import useAuth hook
+import { useAuth } from '@/hooks/useAuth'; 
+
 function GameReviewContent() {
-  const { user } = useAuth(); // Assuming useAuth is imported and provides the logged-in user
+  const { user } = useAuth(); 
   const searchParams = useSearchParams();
   const gameId = searchParams.get('gameId');
 
@@ -43,50 +45,53 @@ function GameReviewContent() {
     GameSchema
   );
 
-  // Get the user ID from the URL (if coming from a user's history)
-  const userIdFromUrl = searchParams.get('id');
-
   const { firestore } = getFirebase();
 
-  const [currentMoveIndex, setCurrentMoveIndex] = React.useState<number>(-1); // Start at -1 for initial board (Move 0)
+  const [currentMoveIndex, setCurrentMoveIndex] = React.useState<number>(-1); 
   const [replayedBoardState, setReplayedBoardState] = React.useState<BoardState | null>(null);
   const [replayedTimeElapsed, setReplayedTimeElapsed] = React.useState<number>(0);
   const router = useRouter();
   const [showBombs, setShowBombs] = React.useState<boolean>(false);
-  const [hasShownBombs, setHasShownBombs] = React.useState<boolean>(false);
+  const [invalidGameStateForReplay, setInvalidGameStateForReplay] = React.useState<boolean>(false);
 
-    // Fetch target user data (friend's data if userIdFromUrl is present)
+
     const { data: targetUserData, loading: targetUserLoading, error: targetUserError } = useFirestoreDocument<User>(
         'users',
         game?.userId,
         UserSchema
     );
 
-  // Determine if the game belongs to the logged-in user
   const isOwnGame = game?.userId === user?.uid;
-
-
 
   React.useEffect(() => {
     if (!game?.difficulty) {
       setReplayedBoardState(null);
       setReplayedTimeElapsed(0);
+      setInvalidGameStateForReplay(false);
       return;
     }
-    const difficultySettings = Object.values(DIFFICULTY_LEVELS).find(
-      (level) => level.name === game.difficulty
-    );
+
+    let difficultySettings: DifficultySetting | undefined = DIFFICULTY_LEVELS[game.difficulty as DifficultyKey];
+    if (!difficultySettings) {
+      // If not found by key, try by name (case-insensitive)
+      difficultySettings = Object.values(DIFFICULTY_LEVELS).find(
+        (level) => level.name.toLowerCase() === game.difficulty.toLowerCase()
+      );
+    }
+    
     if (!difficultySettings) {
       console.error(`Unknown difficulty: ${game.difficulty}`);
       setReplayedBoardState(null);
       setReplayedTimeElapsed(0);
+      setInvalidGameStateForReplay(true); // Indicate an issue with game data
       return;
     }
+    setInvalidGameStateForReplay(false); // Reset if difficulty is found
+
 
     let targetBoard: BoardState;
     let targetTime: number = 0;
 
-    // Case 1: No moves to replay (or game quit early)
     if (!game.moves || game.moves.length === 0) {
       if (game.gameState && !nonJsonGameStates.includes(game.gameState)) {
         try {
@@ -98,9 +103,13 @@ function GameReviewContent() {
         } catch (e) {
           console.error("Error parsing game.gameState for no-moves display:", e);
           targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
+          setInvalidGameStateForReplay(true);
         }
       } else {
         targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
+        if (game.gameState && nonJsonGameStates.includes(game.gameState) && currentMoveIndex >=0){
+            setInvalidGameStateForReplay(true); // Non-JSON state means we can't truly know mines
+        }
       }
       if (game.endTime && game.startTime) {
         targetTime = Math.round((game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
@@ -110,45 +119,68 @@ function GameReviewContent() {
       return;
     }
 
-    // Case 2: Replay moves
     let trueMinedBoard: BoardState | null = null;
     
     if (game.gameState && !nonJsonGameStates.includes(game.gameState)) {
       try {
         trueMinedBoard = JSON.parse(game.gameState) as BoardState;
+        // Basic validation for trueMinedBoard structure
+        if (!Array.isArray(trueMinedBoard) || trueMinedBoard.length !== difficultySettings.rows || 
+            (trueMinedBoard.length > 0 && trueMinedBoard[0].length !== difficultySettings.cols)) {
+            console.error("Parsed game.gameState dimensions mismatch for replay.");
+            setInvalidGameStateForReplay(true);
+            trueMinedBoard = null; // Invalidate if dimensions are wrong
+        } else {
+            const hasAnyMineInfo = trueMinedBoard.some(row => row.some(cell => cell.isMine === true));
+            if (!hasAnyMineInfo) {
+                 console.warn("Warning: game.gameState for replay does not contain any mine information. Replay might be inaccurate.");
+                 setInvalidGameStateForReplay(true); // Potentially inaccurate replay
+            }
+        }
       } catch (e) {
         console.error("Error parsing game.gameState for replay:", e);
-        // Fallback to initial board but we can't replay accurately without trueMinedBoard
-        setReplayedBoardState(createInitialBoard(difficultySettings.rows, difficultySettings.cols));
-        return;
+        setInvalidGameStateForReplay(true);
       }
     } else {
       console.error("Cannot replay: game.gameState is not a valid board JSON for sourcing mine locations.");
-      setReplayedBoardState(createInitialBoard(difficultySettings.rows, difficultySettings.cols));
-      return;
+      setInvalidGameStateForReplay(true);
     }
+
+    if (!trueMinedBoard) {
+        // If trueMinedBoard is null (due to parse error, dimension mismatch, or non-JSON state),
+        // display an empty board and disable replay controls or show an error.
+        setReplayedBoardState(createInitialBoard(difficultySettings.rows, difficultySettings.cols));
+        // setInvalidGameStateForReplay(true); // Already set if we reach here
+        return;
+    }
+
 
     targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
     for (let r = 0; r < difficultySettings.rows; r++) {
       for (let c = 0; c < difficultySettings.cols; c++) {
         if (trueMinedBoard && trueMinedBoard[r] && trueMinedBoard[r][c]) {
           targetBoard[r][c].isMine = trueMinedBoard[r][c].isMine;
-          targetBoard[r][c].adjacentMines = trueMinedBoard[r][c].adjacentMines;
         } else {
-          console.warn(`Missing cell data in trueMinedBoard at ${r},${c}`);
+          // This case should be less likely if trueMinedBoard has passed dimension checks
+          console.warn(`Missing cell data in trueMinedBoard at ${r},${c} during board reconstruction.`);
+          // Default to not a mine if data is missing to prevent errors
+          targetBoard[r][c].isMine = false; 
         }
       }
     }
-    // Ensure adjacent mines are calculated for the clean targetBoard based on trueMinedBoard's mines
     targetBoard = calculateAdjacentMines(targetBoard, difficultySettings.rows, difficultySettings.cols);
 
-    targetTime = 0; // Default for initial state (currentMoveIndex === -1)
+    targetTime = 0; 
 
     if (currentMoveIndex >= 0 && game.moves && currentMoveIndex < game.moves.length) {
       for (let i = 0; i <= currentMoveIndex; i++) {
         const move = game.moves[i];
+        if (!targetBoard[move.y] || !targetBoard[move.y][move.x]) {
+            console.warn(`Move ${i} references invalid coordinates (${move.x}, ${move.y}). Skipping.`);
+            continue;
+        }
         if (move.action === 'reveal') {
-          const result = revealCell(targetBoard, difficultySettings.rows, difficultySettings.cols, move.x, move.y); // 'playing', 0 for mines assumes mines already set
+          const result = revealCell(targetBoard, difficultySettings.rows, difficultySettings.cols, move.x, move.y); 
           targetBoard = result.newBoard;
           if (result.gameOver && i === currentMoveIndex && targetBoard[move.y][move.x].isMine) {
              targetBoard[move.y][move.x].exploded = true;
@@ -156,83 +188,77 @@ function GameReviewContent() {
         } else if (move.action === 'flag' || move.action === 'unflag') {
           targetBoard = toggleFlag(targetBoard, move.x, move.y);
         }
-        // Update time based on the *current* move being processed in the loop IF it's the last one to be applied
         if (i === currentMoveIndex && move.timestamp && game.startTime) {
             targetTime = Math.round((move.timestamp.toDate().getTime() - game.startTime.toDate().getTime()) / 1000);
         }
       }
-      // Highlight the cell of the current actioned move
       const currentActionedMove = game.moves[currentMoveIndex];
-      if (targetBoard[currentActionedMove.y] && targetBoard[currentActionedMove.y][currentActionedMove.x]) {
+       if (targetBoard[currentActionedMove.y] && targetBoard[currentActionedMove.y][currentActionedMove.x]) {
         targetBoard[currentActionedMove.y][currentActionedMove.x].isReplayHighlight = true;
         
-        // Determine if the move was bad
         let isBadMove = false;
-        const cellAtMove = targetBoard[currentActionedMove.y][currentActionedMove.x];
-        const originalCellAtMove = trueMinedBoard[currentActionedMove.y]?.[currentActionedMove.x];
+        // trueMinedBoard should be valid here if we got this far
+        const originalCellAtMove = trueMinedBoard![currentActionedMove.y]?.[currentActionedMove.x];
 
 
         if (currentActionedMove.action === 'reveal' && originalCellAtMove?.isMine) {
-          isBadMove = true; // Clicked a mine
+          isBadMove = true; 
         } else if (currentActionedMove.action === 'flag' && !originalCellAtMove?.isMine) {
-          isBadMove = true; // Flagged a non-mine
+          isBadMove = true; 
         }
-        // Note: Unflagging a correctly flagged mine isn't inherently "bad" in the same way,
-        // and unflagging a non-mine is generally good or neutral.
-
         targetBoard[currentActionedMove.y][currentActionedMove.x].isReplayHighlightBad = isBadMove;
       }
     }
-    // if currentMoveIndex is -1, targetBoard is initial, targetTime is 0, no highlight.
-
     setReplayedBoardState(targetBoard);
     setReplayedTimeElapsed(targetTime);
 
   }, [game, currentMoveIndex]);
 
-  // Effect to update board state when showBombs changes
   React.useEffect(() => {
-    if (showBombs && game?.gameState && !nonJsonGameStates.includes(game.gameState)) {
+    if (showBombs && game?.gameState && !nonJsonGameStates.includes(game.gameState) && !invalidGameStateForReplay) {
       try {
        const trueMinedBoard = JSON.parse(game.gameState) as BoardState;
-       const boardWithBombsRevealed = JSON.parse(JSON.stringify(trueMinedBoard)) as BoardState; // Deep copy
+       const boardWithBombsRevealed = JSON.parse(JSON.stringify(trueMinedBoard)) as BoardState; 
        boardWithBombsRevealed.forEach(row => row.forEach(cell => {
           cell.isRevealed = true;
           cell.exploded = false;
        }));
-       setReplayedBoardState(boardWithBombsRevealed); // Update the state used by GameBoard
+       setReplayedBoardState(boardWithBombsRevealed); 
       } catch (e) {
         console.error("Error parsing game.gameState for bomb reveal:", e);
       }
-    } else if (!showBombs && game) {
-        // If showBombs is turned off, re-run the initial board state calculation effect
-        // to revert to the state based on currentMoveIndex
-        // This is a bit of a hack, ideally the main effect would handle both cases cleanly
-        // but re-running it ensures the correct board state based on moves is restored.
-        // A more robust solution would be to manage the board state derived from moves
-        // and the 'showBombs' overlay state separately.
-        const difficultySettings = Object.values(DIFFICULTY_LEVELS).find(
-            (level) => level.name === game.difficulty
-        );
-        if (difficultySettings) {
+    } else if (!showBombs && game && !invalidGameStateForReplay) {
+        const difficultySettings = DIFFICULTY_LEVELS[game.difficulty.toLowerCase() as DifficultyKey] || Object.values(DIFFICULTY_LEVELS).find(l => l.name.toLowerCase() === game.difficulty.toLowerCase());
+
+        if (difficultySettings && game.gameState && !nonJsonGameStates.includes(game.gameState)) {
              let targetBoard = createInitialBoard(difficultySettings.rows, difficultySettings.cols);
-            if (game.gameState && !nonJsonGameStates.includes(game.gameState)) {
+             try {
                  const trueMinedBoard = JSON.parse(game.gameState) as BoardState;
-                 for (let r = 0; r < difficultySettings.rows; r++) {
-                    for (let c = 0; c < difficultySettings.cols; c++) {
-                        if (trueMinedBoard && trueMinedBoard[r] && trueMinedBoard[r][c]) {
-                            targetBoard[r][c].isMine = trueMinedBoard[r][c].isMine;
-                            targetBoard[r][c].adjacentMines = trueMinedBoard[r][c].adjacentMines;
+                 // Ensure trueMinedBoard matches dimensions before using it
+                 if (Array.isArray(trueMinedBoard) && trueMinedBoard.length === difficultySettings.rows && 
+                     (trueMinedBoard.length === 0 || trueMinedBoard[0].length === difficultySettings.cols)) {
+                     
+                     for (let r = 0; r < difficultySettings.rows; r++) {
+                        for (let c = 0; c < difficultySettings.cols; c++) {
+                            if (trueMinedBoard[r] && trueMinedBoard[r][c]) { // Check if cell exists
+                                targetBoard[r][c].isMine = trueMinedBoard[r][c].isMine;
+                            }
                         }
-                    }
+                     }
+                     targetBoard = calculateAdjacentMines(targetBoard, difficultySettings.rows, difficultySettings.cols);
+                 } else {
+                    console.warn("Dimension mismatch or invalid trueMinedBoard when hiding bombs, using clean board.");
                  }
-                 targetBoard = calculateAdjacentMines(targetBoard, difficultySettings.rows, difficultySettings.cols);
-            }
+             } catch (e) {
+                  console.error("Error parsing game.gameState when hiding bombs, using clean board", e);
+             }
+
 
              if (currentMoveIndex >= 0 && game.moves && currentMoveIndex < game.moves.length) {
-                // Replay moves up to currentMoveIndex again
                 for (let i = 0; i <= currentMoveIndex; i++) {
                     const move = game.moves[i];
+                    if (!targetBoard[move.y] || !targetBoard[move.y][move.x]) continue;
+
                      if (move.action === 'reveal') {
                         const result = revealCell(targetBoard, difficultySettings.rows, difficultySettings.cols, move.x, move.y);
                          targetBoard = result.newBoard;
@@ -246,40 +272,43 @@ function GameReviewContent() {
                 const currentActionedMove = game.moves[currentMoveIndex];
                 if (targetBoard[currentActionedMove.y] && targetBoard[currentActionedMove.y][currentActionedMove.x]) {
                     targetBoard[currentActionedMove.y][currentActionedMove.x].isReplayHighlight = true;
-                     const trueMinedBoardForHighlight = JSON.parse(game.gameState) as BoardState;
-                     let isBadMove = false;
-                     const originalCellAtMove = trueMinedBoardForHighlight[currentActionedMove.y]?.[currentActionedMove.x];
-                      if (currentActionedMove.action === 'reveal' && originalCellAtMove?.isMine) {
-                         isBadMove = true;
-                     } else if (currentActionedMove.action === 'flag' && !originalCellAtMove?.isMine) {
-                         isBadMove = true;
-                     }
-                    targetBoard[currentActionedMove.y][currentActionedMove.x].isReplayHighlightBad = isBadMove;
+                    try {
+                         const trueMinedBoardForHighlight = JSON.parse(game.gameState) as BoardState;
+                         let isBadMove = false;
+                         const originalCellAtMove = trueMinedBoardForHighlight[currentActionedMove.y]?.[currentActionedMove.x];
+                          if (currentActionedMove.action === 'reveal' && originalCellAtMove?.isMine) {
+                             isBadMove = true;
+                         } else if (currentActionedMove.action === 'flag' && !originalCellAtMove?.isMine) {
+                             isBadMove = true;
+                         }
+                        targetBoard[currentActionedMove.y][currentActionedMove.x].isReplayHighlightBad = isBadMove;
+                    } catch(e) {
+                        console.warn("Could not determine bad move highlight due to gameState parse error when hiding bombs.")
+                    }
                 }
              }
              setReplayedBoardState(targetBoard);
+        } else if (difficultySettings && !invalidGameStateForReplay) { // No valid gameState, but difficulty exists
+            setReplayedBoardState(createInitialBoard(difficultySettings.rows, difficultySettings.cols));
         }
     }
-  }, [showBombs, game, currentMoveIndex]); // Depend on showBombs, game, and currentMoveIndex
+  }, [showBombs, game, currentMoveIndex, invalidGameStateForReplay]); 
 
   return (
     <AppLayout>
       <div className="container mx-auto p-4 md:p-8">
-            {/* PASTE THE BACK BUTTON CODE BLOCK HERE */}
-
-            {game && ( // Only show back button if game data is loaded
+            {game && ( 
               <div className="mb-4">
-                {isOwnGame ? ( // If game belongs to logged-in user
+                {isOwnGame ? ( 
                   <Button variant="outline" onClick={() => router.push('/history')}>
                     <ChevronLeft className="mr-2 h-4 w-4" /> Back to My History
                   </Button>
                 ) : (
-                  // If game belongs to another user (friend)
                   targetUserLoading ? (
                     <Skeleton className="h-10 w-40" />
                   ) : targetUserError ? (
                     <p className="text-destructive">Error loading user data for back button: {targetUserError.message}</p>
-                  ) : ( // targetUserData is available (or undefined if not found, but we still render the button)
+                  ) : ( 
                     <Button variant="outline" onClick={() => router.push(`/history?id=${game.userId}`)}>
                       <ChevronLeft className="mr-2 h-4 w-4" /> Back to {targetUserData?.profilePreferences?.displayName || targetUserData?.username || 'Friend'}'s History
                     </Button>
@@ -340,48 +369,60 @@ function GameReviewContent() {
                     initialBoardState={JSON.stringify(replayedBoardState)}
                     initialTimeElapsed={replayedTimeElapsed}
                     reviewMode={true}
-                    isGuest={true} // Or determine based on actual game data if available
+                    isGuest={true} 
                     activeGameId={game.id}
                   />
                 </div>
                   <div className="w-full flex justify-between items-center">
-                      {/* "Show Bombs" button */}
                       <Button
                           onClick={() => setShowBombs(prev => !prev)}
                           variant={showBombs ? "secondary" : "outline"}
-                      >{showBombs ? "Hide Bombs" : "Show Bombs"}</Button>
-                      {/* "Continue from this point" button */}
-                      <Button
-                          onClick={async () => {
-                            if (!replayedBoardState) {
-                                console.error("Cannot continue from this point: replayedBoardState is null.");
-                                return;
-                            }
-                            if (!game?.difficulty) {
-                                console.error("Cannot continue from this point: game difficulty is not available.");
-                                return;
-                            }
-                            try {
-                              const newGameRef = await addDoc(collection(firestore, "games"), {
-                                difficulty: game.difficulty,
-                                endTime: serverTimestamp(),
-                                gameState: JSON.stringify(replayedBoardState),
-                                moves: [],
-                                result: 'in-progress',
-                                startTime: serverTimestamp(),
-                                userId: game.userId,
-                              });
-                              router.push(`/history`);
-                            } catch (e) {
-                              console.error("Error creating new game document:", e);
-                            }
-                          }}
-                          variant={showBombs ? "destructive" : "outline"}
-                          disabled={showBombs}>Continue from this point</Button>
+                          disabled={invalidGameStateForReplay && !showBombs}
+                          title={invalidGameStateForReplay && !showBombs ? "Cannot show bombs, game data is incomplete." : (showBombs ? "Hide Bombs" : "Show Bombs")}
+                      >
+                        <Bomb className="mr-2 h-4 w-4" /> {showBombs ? "Hide Bombs" : "Show All Bombs"}
+                      </Button>
+                      {isOwnGame && ( // Only show "Continue from this point" for own games
+                        <Button
+                            onClick={async () => {
+                              if (!replayedBoardState) {
+                                  console.error("Cannot continue from this point: replayedBoardState is null.");
+                                  return;
+                              }
+                              if (!game?.difficulty) {
+                                  console.error("Cannot continue from this point: game difficulty is not available.");
+                                  return;
+                              }
+                              if (!user) {
+                                  console.error("Cannot continue from this point: user not logged in.");
+                                  return;
+                              }
+                              try {
+                                const newGameRef = await addDoc(collection(firestore, "games"), {
+                                  difficulty: game.difficulty, // Use original difficulty
+                                  endTime: null, // New game, no end time
+                                  gameState: JSON.stringify(replayedBoardState), // Current replayed state
+                                  moves: [], // Start with no moves from this point
+                                  result: 'in-progress',
+                                  startTime: serverTimestamp(), // New start time
+                                  userId: user.uid, // Logged-in user
+                                });
+                                router.push(`/play`); // Navigate to play page, which should load this new in-progress game
+                              } catch (e) {
+                                console.error("Error creating new game document:", e);
+                              }
+                            }}
+                            variant="outline"
+                            disabled={showBombs || invalidGameStateForReplay}
+                            title={showBombs ? "Hide bombs to enable continuation." : (invalidGameStateForReplay ? "Cannot continue, game data is incomplete." : "Start a new game from this board state.")}
+                        >
+                            Continue from this point
+                        </Button>
+                      )}
                   </div>
                 
 
-                {game.moves && game.moves.length > 0 && (
+                {game.moves && game.moves.length > 0 && !invalidGameStateForReplay && (
                   <div className="flex justify-center items-center space-x-4">
                     <Button
                       onClick={() => setCurrentMoveIndex(prev => Math.max(-1, prev - 1))}
@@ -406,17 +447,29 @@ function GameReviewContent() {
                 )}
               </div>
             )}
+            
+            {invalidGameStateForReplay && (
+                 <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Replay Unavailable or Inaccurate</AlertTitle>
+                    <AlertDescription>
+                        The stored game data (`gameState`) for this game is incomplete, missing mine locations, or not in a valid format.
+                        As a result, replaying moves may not accurately reflect the original game. The board shown might be an empty or default state.
+                    </AlertDescription>
+                 </Alert>
+            )}
 
-            {game.moves && game.moves.length === 0 && (
+
+            {game.moves && game.moves.length === 0 && !invalidGameStateForReplay && (
                <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>No Replay Available</AlertTitle>
                 <AlertDescription>
-                  No moves were recorded for this game. The final board state (if available) is shown.
+                  No moves were recorded for this game. The final board state (if available and valid) is shown.
                 </AlertDescription>
               </Alert>
             )}
-             {!replayedBoardState && game.moves && game.moves.length > 0 && (
+             {!replayedBoardState && game.moves && game.moves.length > 0 && !invalidGameStateForReplay && (
                <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Loading Replay</AlertTitle>
@@ -425,33 +478,6 @@ function GameReviewContent() {
                 </AlertDescription>
               </Alert>
             )}
-
-            
-          {/*  
-            <Accordion type="single" collapsible className="w-full">
-              <AccordionItem value="game-details">
-                <AccordionTrigger>Game Details</AccordionTrigger>
-                <AccordionContent className="space-y-2 pt-2">
-                  <p><span className="font-semibold">Game ID:</span> {game.id}</p>
-                  <p><span className="font-semibold">Difficulty:</span> {game.difficulty}</p>
-                  <p><span className="font-semibold">Final Result:</span> {game.result}</p>
-                  {game.startTime && (
-                    <p><span className="font-semibold">Started:</span> {new Date(game.startTime.toDate()).toLocaleString()}</p>
-                  )}
-                  {game.endTime && (
-                    <p><span className="font-semibold">Ended:</span> {new Date(game.endTime.toDate()).toLocaleString()}</p>
-                  )}
-                  {(game.result === 'won' || game.result === 'lost' || game.result === 'quit') ? (
-                    game.endTime && game.startTime ? (
-                      <p><span className="font-semibold">Duration:</span> {Math.round((game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000)} seconds</p>
-                    ) : null
-                  ) : null}
-                  <p><span className="font-semibold">Total Moves:</span> {game.moves?.length || 0}</p>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          */}
-
           </CardContent>
         </Card>
       )}
@@ -463,7 +489,7 @@ function GameReviewContent() {
 
 export default function GameReviewPage() {
   return (
-    <Suspense fallback={<div>Loading game review...</div>}><GameReviewContent /></Suspense>
+    <Suspense fallback={<div className="flex justify-center items-center h-screen"><p>Loading game review...</p></div>}><GameReviewContent /></Suspense>
   );
 }
 
