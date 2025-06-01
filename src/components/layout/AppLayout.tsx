@@ -114,15 +114,6 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
                  </Link>
                </SidebarMenuButton>
              </SidebarMenuItem>
-             {user && ( // Only show if user is logged in
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === '/compare-stats'} tooltip="Compare Stats">
-                  <Link href="/compare-stats">
-                    <BarChart3 /> {/* Using BarChart3 as a comparison icon */}
-                    <span>Compare Stats</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>)}
              <SidebarMenuItem>
  <SidebarMenuButton asChild isActive={pathname === '/profile'} tooltip="Profile Settings" className={!user ? 'text-gray-400 pointer-events-none' : 'text-foreground data-[state=active]:bg-secondary data-[state=active]:text-secondary-foreground'}>
                  <Link href={user ? `/profile?id=${user.uid}` : "/profile"}>
