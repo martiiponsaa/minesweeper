@@ -75,7 +75,8 @@ export default function ProfilePageContent() {
   const [currentAvatarPreview, setCurrentAvatarPreview] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    if (isEditingOwnProfile && userData) {
+    // Ensure userData is available and it's for the own profile edit scenario, and not in initial loading states
+    if (isEditingOwnProfile && userData && !userDocumentLoading && !authLoading) {
       const resetValues: UserProfileFormValues = {
         displayName:
           userData.profilePreferences?.displayName ||
@@ -91,7 +92,7 @@ export default function ProfilePageContent() {
       form.reset(resetValues);
       setCurrentAvatarPreview(resetValues.avatar || undefined);
     }
-  }, [userData, form, isEditingOwnProfile]);
+  }, [userData, form, isEditingOwnProfile, userDocumentLoading, authLoading]); // Added loading states to dependencies
     
   const onSubmit = async (values: UserProfileFormValues) => {
     if (!user || !firestore || !auth.currentUser) { 
