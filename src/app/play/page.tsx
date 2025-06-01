@@ -500,7 +500,7 @@ export default function PlayPage() {
             <CardTitle>Game Setup</CardTitle>
             <CardDescription>Choose difficulty to start a new game, or resume an existing one.</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col sm:flex-row items-center gap-4">
+          <CardContent className="flex flex-col sm:flex-row items-center sm:items-baseline gap-4">
             {/* Difficulty select for the main board (loaded/resumed game) */}
               <Label htmlFor="difficulty-select">Difficulty</Label>
               <Select 
@@ -542,7 +542,7 @@ export default function PlayPage() {
               </Select>
               <Button
                 onClick={handleStartGame}
-                className="w-full sm:w-auto mt-4 sm:mt-6 bg-primary hover:bg-primary/90"
+                className="w-full sm:w-auto bg-primary hover:bg-primary/90"
                 disabled={isSavingOrStarting || (showBoard && !!(activeGameIdRef.current ?? false) && !(gameResolvedRef.current ?? true) && !!(user ?? false) && (gameData?.difficulty ?? null) === DIFFICULTY_LEVELS[selectedDifficultyKey].name)}
                 title={
                     (showBoard && activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name)
