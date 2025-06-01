@@ -62,26 +62,23 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
         const totalSolveTimePerDifficulty: Record<string, number> = {};
         const difficultyCounts: Record<string, {played: number, wins: number}> = {};
 
-        games.forEach(game => {
+ games.forEach(game => {
             if (game.result === 'won') {
                 wins++;
-                if (game.endTime && game.startTime) {
-                    totalSolveTime += (game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000;
-                    if (game.difficulty) {
-                        if (!totalSolveTimePerDifficulty[game.difficulty]) totalSolveTimePerDifficulty[game.difficulty] = 0;
-                        totalSolveTimePerDifficulty[game.difficulty] += (game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000;
-                    } else { /* Handle games without difficulty if necessary */ }
-                    completedGamesCount++;
-                }
             } else if (game.result === 'lost') {
                 losses++;
+            }
+
+            // For games that are won or lost and have time data
+            if ((game.result === 'won' || game.result === 'lost') && game.endTime && game.startTime) {
+                totalSolveTime += (game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000;
+                completedGamesCount++;
+            }
+
+            // Update difficulty counts for games with a difficulty
+            if (game.difficulty) {
+                if (!difficultyCounts[game.difficulty]) difficultyCounts[game.difficulty] = { played: 0, wins: 0 };
                 if (game.endTime && game.startTime) { 
-                    totalSolveTime += (game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000;
-                    completedGamesCount++;
-                    if (game.difficulty) {
-                        if (!totalSolveTimePerDifficulty[game.difficulty]) totalSolveTimePerDifficulty[game.difficulty] = 0;
-                        totalSolveTimePerDifficulty[game.difficulty] += (game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000;
-                    }
                     difficultyCounts[game.difficulty] = { played: 0, wins: 0 };
                 }
                 difficultyCounts[game.difficulty].played++;
@@ -154,7 +151,7 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
             { name: 'Losses', value: losses, fill: 'hsl(var(--chart-3))' }, // Gold-like
         ];
 
-        return { gamesPlayed, wins, losses, winRate, avgSolveTime, gamesByDifficulty, winLossData, avgSolveTimePerDifficulty };
+        return { gamesPlayed, wins, losses, winRate, avgSolveTime, gamesByDifficulty, winLossData, avgSolveTimePerDifficulty, actionsPerGameChartData };
     };
 
     useEffect(() => {

@@ -15,6 +15,7 @@ import {
   orderBy, // Added orderBy
   where, // Added where
 } from 'firebase/firestore';
+import type { Query } from 'firebase/firestore';
 import { z, ZodError } from 'zod';
 import { getFirebase } from '@/firebase';
 
@@ -26,7 +27,7 @@ type UseFirestoreCollectionResult<T> = {
 };
 
 export function useFirestoreCollection<T>(
-  collectionPath: string,
+  queryOrCollectionPath: string | Query<DocumentData, DocumentData> | null,
   schema: z.ZodType<T>,
   constraints: QueryConstraint[] = [],
   disabled: boolean = false // New parameter to disable fetching
@@ -50,8 +51,22 @@ export function useFirestoreCollection<T>(
     }
 
     setLoading(true); // Set loading true at the start of fetch/refetch
-    const collectionRef = collection(firestore, collectionPath);
-    const q = query(collectionRef, ...constraints);
+
+    let q: Query<DocumentData, DocumentData> | null;
+
+    if (typeof queryOrCollectionPath === 'string') {
+      const collectionRef = collection(firestore, queryOrCollectionPath);
+      q = query(collectionRef, ...constraints);
+    } else {
+      q = queryOrCollectionPath;
+    }
+
+    if (!q) {
+      // If query is null, we don't fetch data.
+      setLoading(false);
+      setError(null); // Or set a specific error if needed
+      return; // Exit useEffect
+    }
 
     const unsubscribe = onSnapshot(
       q,
@@ -98,8 +113,8 @@ export function useFirestoreCollection<T>(
     );
 
     return () => unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, collectionPath, schema, JSON.stringify(constraints), disabled, refreshKey]);
+    // Added queryOrCollectionPath and constraints to dependencies. Stringifying constraints for deep comparison.
+  }, [firestore, queryOrCollectionPath, schema, JSON.stringify(constraints), disabled, refreshKey]);
 
   return { data, loading, error, refetch };
 }

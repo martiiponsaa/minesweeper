@@ -20,12 +20,14 @@ export interface FirestoreUser {
   userFriendCode?: string;
   createdAt?: Timestamp | null;
   // Add user statistics fields here for comparison
-  stats?: { // Assuming stats are stored as a subfield
-    gamesPlayed: number;
-    gamesWon: number;
+  stats?: {
+ totalWins: number;
+ totalLosses: number;
+    totalScore: number;
     winRate: number;
-    averageTimePerGame: number; // Example stat
-    // Add other relevant stats
+    averageScore: number; // Changed from totalScore to averageScore
+ totalTime: number; // Added totalTime
+    averageTime: number;
   };
 }
 
@@ -54,6 +56,13 @@ export const UserSchema = z.object({
   // friendCodes array is deprecated, friendships are stored in 'friendships' collection
   // friendIds array is deprecated, friendships are stored in 'friendships' collection
   createdAt: timestampSchema.nullable().optional(), 
+  stats: z.object({
+    totalWins: z.number(),
+    totalLosses: z.number(),
+    winRate: z.number(),
+    averageScore: z.number(),
+    averageTime: z.number(),
+  }).optional(),
 });
 
 export type User = z.infer<typeof UserSchema>;

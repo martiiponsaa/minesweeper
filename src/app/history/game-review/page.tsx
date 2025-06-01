@@ -3,8 +3,8 @@
 'use client';
 
 import { GameSchema, type Game } from '@/lib/firebaseTypes';
-import type { BoardState, CellState, DifficultySetting } from '@/lib/minesweeper'; // CellState import, DifficultySetting import
-import { createInitialBoard, revealCell, toggleFlag, calculateAdjacentMines } from '@/lib/minesweeper';
+import type { BoardState, CellState } from '@/lib/minesweeper'; // CellState import
+import type { DifficultySetting } from '@/config/minesweeperSettings'; // DifficultySetting import
 import { DIFFICULTY_LEVELS, type DifficultyKey } from '@/config/minesweeperSettings';
 import { useSearchParams } from 'next/navigation';
 import AppLayout from '@/components/layout/AppLayout'; 
@@ -28,6 +28,7 @@ const nonJsonGameStates = [
   "AUTO_QUIT_MULTIPLE_IN_PROGRESS",
 ];
 
+import { createInitialBoard, revealCell, toggleFlag, calculateAdjacentMines } from '@/lib/minesweeper';
 import { addDoc, collection, Firestore, serverTimestamp } from "firebase/firestore";
 import { useRouter } from 'next/navigation';
 import { useFirestoreDocument } from '@/hooks/useFirestoreDocument';

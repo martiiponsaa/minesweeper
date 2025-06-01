@@ -518,7 +518,7 @@ export default function PlayPage() {
               <Button
                 onClick={handleStartGame}
                 className="w-full sm:w-auto bg-primary hover:bg-primary/90"
-                disabled={isSavingOrStarting || (showBoard && activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name && gameStatusFromBoard === 'playing')}
+ disabled={Boolean(isSavingOrStarting || (showBoard && activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name && gameStatusFromBoard === 'playing'))}
                  title={
                     (showBoard && activeGameIdRef.current && !gameResolvedRef.current && user && gameData?.difficulty === DIFFICULTY_LEVELS[selectedDifficultyKey].name && gameStatusFromBoard === 'playing')
                     ? "A game is in progress. Click Restart or Surrender first."

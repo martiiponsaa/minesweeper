@@ -15,7 +15,7 @@ export interface CellState {
 
 export type BoardState = CellState[][];
 
-export type GameStatus = 'ready' | 'playing' | 'won' | 'lost';
+export type GameStatus = 'ready' | 'playing' | 'won' | 'lost' | 'quit';
 
 // Creates an empty board structure without mines. Mines are placed on the first click.
 export const createInitialBoard = (rows: number, cols: number): BoardState => {

@@ -44,9 +44,9 @@ export default function ProfilePageContent() {
   const router = useRouter();
 
   // Determine if the profile being viewed is the logged-in user's profile
-  const isOwnProfile = !userIdFromUrl || userIdFromUrl === user?.uid;
-  const isEditingOwnProfile = isOwnProfile && user;
-  const isViewingOtherUserProfile = userIdFromUrl && userIdFromUrl !== user?.uid;
+  const isOwnProfile = !userIdFromUrl || (user && userIdFromUrl === user.uid);
+  const isEditingOwnProfile = isOwnProfile && user !== null; // Explicitly check user is not null
+  const isViewingOtherUserProfile = userIdFromUrl && (!user || userIdFromUrl !== user.uid); // Check if user is null or different
 
   const ownProfileDocId = isEditingOwnProfile ? user.uid : undefined;
   const otherUserDocIdToFetch = isViewingOtherUserProfile ? userIdFromUrl : undefined;
@@ -98,7 +98,7 @@ export default function ProfilePageContent() {
   }, [userData, form, isEditingOwnProfile, userDocumentLoading, authLoading]); // Added loading states to dependencies
     
   const onSubmit = async (values: UserProfileFormValues) => {
-    if (!user || !firestore || !auth.currentUser) { 
+    if (!user || !user.uid || !firestore || !auth.currentUser) { // Explicitly check user.uid
       toast({ title: 'Error', description: 'You must be logged in to update your profile.', variant: 'destructive' });
       return;
     }
@@ -130,7 +130,7 @@ export default function ProfilePageContent() {
   };
 
   const handlePasswordReset = async () => {
-    if (!user || !user.email) {
+    if (!user || !user.email || !auth) { // Explicitly check user and auth
       toast({
         title: 'Error',
         description: 'No user logged in or email not available.',
@@ -140,7 +140,7 @@ export default function ProfilePageContent() {
     }
 
     try {
-      await sendPasswordResetEmail(auth, user.email);
+      await sendPasswordResetEmail(auth, user.email); // auth is checked above
       toast({ title: 'Password Reset Email Sent', description: 'Please check your inbox.' });
     } catch (err) {
       const firebaseError = err as AuthError; 
@@ -198,7 +198,7 @@ export default function ProfilePageContent() {
     );
   }
 
- if (!user && !authLoading && (!userIdFromUrl || (userIdFromUrl && userIdFromUrl === user?.uid))) {
+ if (!user && !authLoading && !userIdFromUrl) { // Simplified check
     return (
       <AppLayout>
         <div className="container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center min-h-[calc(100vh-10rem)]">

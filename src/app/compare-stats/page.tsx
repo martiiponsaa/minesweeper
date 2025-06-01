@@ -16,24 +16,24 @@ interface AverageStats {
   averageScore: number;
   averageTime: number;
 }
-
-import { FirestoreUser, FriendshipLink } from "@/lib/firebaseTypes"; 
+import { FriendshipSchema, UserSchema, Friendship, User } from "@/lib/firebaseTypes";
+import { FirestoreUser } from "@/lib/firebaseTypes"; 
 const CompareStatsPage = () => {
-  const { user } = useAuth();
+  const { user } = useAuth() as { user: User | null };
   const { firestore } = getFirebase(); // Initialize Firestore
   const [friendStats, setFriendStats] = useState<FirestoreUser[]>([]);
   const [averageFriendStats, setAverageFriendStats] = useState<AverageStats | null>(null);
 
   const { data: friendsList, loading: friendsLoading } = useFirestoreCollection(
-    user ? query(collection(firestore, "friendships"), where("users", "array-contains", user.uid)) : null
+ user ? query(collection(firestore, "friendships"), where("users", "array-contains", user.id)) : null, FriendshipSchema
   );
 
   const friendIds = friendsList
-    ?.map((link: FriendshipLink) => link.users.find((id) => id !== user?.uid))
+    ?.map((link: Friendship) => link.users.find((id) => id !== user?.id))
     .filter(Boolean) as string[];
 
   const { data: friendsProfiles, loading: friendsProfilesLoading } = useFirestoreCollection(
-    friendIds && friendIds.length > 0 ? query(collection(firestore, "users"), where("id", "in", friendIds)) : null
+    friendIds && friendIds.length > 0 ? query(collection(firestore, "users"), where("id", "in", friendIds)) : null, UserSchema
   );
 
   useEffect(() => {
