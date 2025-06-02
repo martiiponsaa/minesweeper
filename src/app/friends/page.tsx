@@ -340,9 +340,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
                              </ul>
                            )}
                            {/* Placeholder for future stat comparison feature */}
-                           {friendsProfiles.length > 0 && (
+                           {/* {friendsProfiles.length > 0 && (
                             <Button className="mt-4 w-full">Compare Stats</Button>
-                           )}
+                           )} */}
                        </CardContent>
                   </Card>
                </TabsContent>

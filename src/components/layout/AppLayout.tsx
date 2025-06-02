@@ -35,6 +35,7 @@ import {
 import { useRouter, usePathname } from 'next/navigation';
 import { Label } from "@/components/ui/label"
 import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
+import { useTheme } from 'next-themes';
 
 
 const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -42,6 +43,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
    const router = useRouter();
    const pathname = usePathname();
    
+   const { theme } = useTheme();
    const handleSignOut = async () => {
      await signOut();
      router.push('/'); // Redirect to home/login page after sign out
@@ -64,8 +66,7 @@ const AppLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
         <SidebarHeader className="items-center group-data-[collapsible=icon]:justify-center">
           <Link href="/dashboard" className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
             {/* Placeholder logo - replace with actual logo */}
-            <img
-                src="/logo.svg"
+            <img src={theme === 'dark' ? '/logo_inverted.svg' : '/logo.svg'}
                 alt="MineVerse Logo"
                 className="h-12 w-12" />
             <span className="font-semibold text-xl text-primary">MineVerse</span>
