@@ -21,7 +21,7 @@ interface SummaryStats {
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth(); // Moved useAuth to the top level
   const router = useRouter();
   const { firestore } = getFirebase(); // Get firestore instance
 
@@ -57,6 +57,12 @@ export default function DashboardPage() {
 
   const summaryStats = user ? calculateSummaryStats() : null;
 
+  // Define handleSignOut at the top level
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/');
+  };
+
   return (
     <AppLayout>
       <div className="container mx-auto p-4 md:p-8">
@@ -65,12 +71,7 @@ export default function DashboardPage() {
             Welcome, {user?.displayName || user?.email || 'Guest'}!
           </h1>
            {user ? (
-             // Add the handleSignOut function within DashboardPageContent
-             (() => {
-               const { signOut } = useAuth(); // Get signOut from useAuth
-               const handleSignOut = async () => { await signOut(); router.push('/'); }; // Define handleSignOut
-               return <Button onClick={handleSignOut} variant="outline">Logout</Button>;
-             })()
+             <Button onClick={handleSignOut} variant="outline">Logout</Button>
            ) : (
              <Button onClick={() => router.push('/login')} variant="outline">Login</Button>
            )}
@@ -178,5 +179,3 @@ export default function DashboardPage() {
     </AppLayout>
   );
 }
-
-    
