@@ -12,12 +12,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, ChevronLeft, ChevronRight, Bomb } from 'lucide-react'; // Added Bomb
-import React from 'react';
+import React, { useState } from 'react';
 import GameBoard from '@/components/minesweeper/GameBoard';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { getFirebase } from '@/firebase';
+import { Input } from '@/components/ui/input';
 
 const nonJsonGameStates = [
   "INITIAL_BOARD_STATE",
@@ -39,6 +40,10 @@ function GameReviewContent() {
   const { user } = useAuth(); 
   const searchParams = useSearchParams();
   const gameId = searchParams.get('gameId');
+
+  const [newMessage, setNewMessage] = useState('');
+  const [messages, setMessages] = useState<{ text: string; sender: 'user' | 'ai' }[]>([]); // Messages will be objects
+  const [initialPromptSent, setInitialPromptSent] = useState(false); // State to track if the initial prompt has been sent
 
   const { data: game, loading, error } = useFirestoreDocument<Game>(
     'games',
@@ -209,6 +214,13 @@ function GameReviewContent() {
         } else if (currentActionedMove.action === 'flag' && !originalCellAtMove?.isMine) {
           isBadMove = true; 
         }
+        
+        if (currentActionedMove.correct && currentActionedMove.correct == true) {
+          isBadMove = false;
+         } 
+         else if (currentActionedMove.correct && currentActionedMove.correct == false) {
+          isBadMove = true;
+        }
         targetBoard[currentActionedMove.y][currentActionedMove.x].isReplayHighlightBad = isBadMove;
       }
     }
@@ -216,6 +228,133 @@ function GameReviewContent() {
     setReplayedTimeElapsed(targetTime);
 
   }, [game, currentMoveIndex]);
+  
+  const sendMessageToGemini = async (messageText: string) => {
+    // This is a placeholder. You'll need to implement a backend endpoint
+    // that receives the messageText and calls your Gemini API.
+    // This function should return the AI's response text.
+    console.log("Sending message to Gemini endpoint:", messageText);
+    // Replace with actual API call
+    // Example using fetch to a hypothetical /api/chat endpoint
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message: messageText }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.response; // Assuming your API returns { response: "AI's response" }
+    } catch (error) {
+        console.error("Error calling Gemini API endpoint:", error);
+        return "Error: Could not get response from AI."; // Return an error message
+    }
+  };
+
+
+  const handleSendMessage = async () => {
+    console.log("handleSendMessage triggered");
+    console.log("newMessage:", newMessage);
+    if (newMessage.trim() === '') {
+      console.log("Message is empty, returning.");
+      return;
+    }
+
+    if (!game) {
+      console.error("Game data not loaded, returning.");
+      return;
+    }
+
+    console.log("Game data available.");
+
+    // --- This block generates initialMessage ---
+    const apiFriendlyBoard = convertGameStateForAPI(JSON.parse(game.gameState) as BoardState);
+    console.log("apiFriendlyBoard:", apiFriendlyBoard);
+
+    var initialMessage = "";
+    var movesString="";
+    if(game.moves) 
+      { 
+        game.moves.forEach((move, index) => {
+        // Format each move into a string
+        movesString += `Move ${index + 1}: Action: ${move.action}, Coordinates: (${move.x}, ${move.y})\n`;
+      });
+      initialMessage = "You are assisting in a Minesweeper game. The game board is represented as a 2D array of numbers where each cell follows this encoding:"
+                        + "-1 → A covered (unrevealed) cell"
+                        + "0–8 → A revealed cell showing the number of adjacent mines"
+                        + "9 → A revealed mine (the game is over or the mine was clicked)"
+                        + "The board is structured in row-major order: each sub-array is a row, and each element in that row is a cell. Here's the current state of the board:"
+                        + JSON.stringify(apiFriendlyBoard)  
+                        + "\nMy moves are the following\n"
+                        + movesString;
+                        setInitialPromptSent(true);
+      
+      } 
+    
+    console.log("Generated initialMessage:", initialMessage.substring(0, 100) + '...'); // Log start of the string
+
+    // --- End of initialMessage generation ---
+
+    const userMessage = initialMessage + '\n' + newMessage;
+    console.log("Combined userMessage (sent to AI):", userMessage.substring(0, 150) + '...'); // Log start of combined string
+
+    // Add /home/user/studio/src/app/loginthe combined message to UI state
+    setMessages((prevMessages) => [...prevMessages, { text: userMessage, sender: 'user' }]);
+    console.log("Combined message added to UI state.");
+
+    setNewMessage(''); // Clear input field
+    console.log("Input field cleared.");
+
+
+    try {
+        // Call the backend endpoint to get Gemini's response
+        console.log("Calling sendMessageToGemini with userMessage...");
+        const aiResponse = await sendMessageToGemini(userMessage);
+        console.log("sendMessageToGemini returned:", aiResponse);
+
+        // Add AI's response to the messages state
+        setMessages((prevMessages) => [...prevMessages, { text: aiResponse, sender: 'ai' }]);
+        console.log("AI response added to UI state.");
+
+    } catch (error) {
+        console.error("Error in sendMessageToGemini:", error);
+         setMessages((prevMessages) => [...prevMessages, { text: "Error: Could not get a response from the AI.", sender: 'ai' }]);
+    }
+};
+
+  function convertGameStateForAPI(gameState: BoardState): number[][] {
+    const apiBoard: number[][] = [];
+
+    for (let y = 0; y < gameState.length; y++) {
+      const row: number[] = [];
+      for (let x = 0; x < gameState[y].length; x++) {
+        const cell = gameState[y][x];
+
+        if (cell.isRevealed) {
+            // If revealed:
+            if (cell.isMine) {
+                // If it's a revealed mine, represent as 3 (from your previous rule)
+                row.push(9);
+            } else {
+                // If revealed and not a mine, show the adjacent mine count (0-8)
+                row.push(cell.adjacentMines);
+            }
+        } else {
+            // If not revealed and not flagged (i.e., covered), represent as -1
+            row.push(-1);
+        }
+      }
+      apiBoard.push(row);
+    }
+
+    return apiBoard;
+  }
 
   React.useEffect(() => {
     if (showBombs && game?.gameState && !nonJsonGameStates.includes(game.gameState) && !invalidGameStateForReplay) {
@@ -284,6 +423,13 @@ function GameReviewContent() {
                              isBadMove = true;
                          } else if (currentActionedMove.action === 'flag' && !originalCellAtMove?.isMine) {
                              isBadMove = true;
+                         } 
+                         
+                         if (currentActionedMove.correct && currentActionedMove.correct == true) {
+                          isBadMove = false;
+                         } 
+                         else if (currentActionedMove.correct && currentActionedMove.correct == false) {
+                          isBadMove = true;
                          }
                         targetBoard[currentActionedMove.y][currentActionedMove.x].isReplayHighlightBad = isBadMove;
                     } catch(e) {
@@ -486,6 +632,41 @@ function GameReviewContent() {
         </Card>
       )}
     </>
+      <div className="chatbox mt-8"> {/* Added some margin-top for spacing */}
+        <h3 className="text-lg font-semibold mb-4">Game Chat</h3> {/* Optional title */}
+        <div className="messages border p-4 rounded-md h-64 overflow-y-auto"> {/* Added border, padding, height, and scroll */}
+          {messages.map((message, index) => (
+              <div style={{ whiteSpace: 'pre-wrap' }} key={index} className={`mb-2 ${message.sender === 'user' ? 'text-right' : 'text-left'}`}> {/* Basic styling based on sender */}
+                  {message.sender === 'user' ? (
+                      <>
+                          <strong>You:</strong> {message.text}
+                      </>
+                  ) : (
+                      <>
+                          <strong>AIsweeper:</strong> {message.text}
+                      </>
+                  )}
+              </div>
+          ))}
+        </div>
+        <div className="input-area mt-4 flex"> {/* Added margin-top and flex for layout */}
+        <Input
+        type="text"
+        placeholder="Type your message..."
+        className="flex-grow mr-2"
+        value={newMessage}
+        onChange={(e) => setNewMessage(e.target.value)}
+        onKeyPress={(e) => { // Add onKeyPress handler
+            if (e.key === 'Enter') {
+                handleSendMessage();
+            }
+        }}
+    />
+    <Button onClick={handleSendMessage}> {/* Add onClick handler */}
+        Send
+    </Button>
+        </div>
+      </div>
     </div>
     </AppLayout>
   )

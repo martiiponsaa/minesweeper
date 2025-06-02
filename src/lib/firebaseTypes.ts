@@ -72,6 +72,7 @@ export type User = z.infer<typeof UserSchema>;
 export const MoveSchema = z.object({
   timestamp: timestampSchema,
   action: z.string(), // Ensure action is always a string
+  correct: z.boolean(),
   x: z.number().int(),
   y: z.number().int(),
 });

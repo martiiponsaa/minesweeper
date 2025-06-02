@@ -4,7 +4,7 @@ import { where, orderBy } from 'firebase/firestore';
  import AppLayout from '@/components/layout/AppLayout';
  import { useAuth } from '@/hooks/useAuth';
  import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
- import {
+import {
    ChartContainer,
    ChartTooltip,
    ChartTooltipContent,
@@ -12,7 +12,7 @@ import { where, orderBy } from 'firebase/firestore';
   import { BarChart, CartesianGrid, XAxis, YAxis, Bar as RechartsBar, PieChart, Pie, Cell as RechartsCell, Legend as RechartsLegend, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts" 
  import { Button } from "@/components/ui/button";
  import { useRouter } from "next/navigation";
- import { BarChart3, History, CheckCircle2, XCircle, Hourglass, PauseCircle, Users } from 'lucide-react'; 
+import { BarChart3, History, CheckCircle2, XCircle, Hourglass, PauseCircle, Users } from 'lucide-react';
 import React, { useState, useEffect } from 'react'; // Import useState and useEffect
  import { GameSchema, type Game } from '@/lib/firebaseTypes';
  import { Skeleton } from '@/components/ui/skeleton';
@@ -32,7 +32,7 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
     const userIdFromUrl = searchParams.get('id');
     const targetUserId = userIdFromUrl && user?.uid !== userIdFromUrl ? userIdFromUrl : user?.uid;
 
-    const { data: games, loading: gamesLoading, error: gamesError } = useFirestoreCollection<Game>(
+    const { data: games, loading: gamesLoading, error: gamesError } = useFirestoreCollection<Game>( 
  'games',
         GameSchema,
         targetUserId ? [where('userId', '==', targetUserId), orderBy('startTime', 'desc')] : [],
@@ -40,7 +40,8 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
     );
     
     // State for actions per game chart data
-    const [actionsPerGameChartData, setActionsPerGameChartData] = useState<{ index: number; id: string; difficulty?: string; result: string; actions: number; }[]>([]);
+    const [actionsPerGameChartData, setActionsPerGameChartData] = useState<{ index: number; id: string; difficulty?: string; result: string; actions: number; }[]>([]); 
+    const [correctIncorrectActionsPerGameChartData, setCorrectIncorrectActionsPerGameChartData] = useState<{ index: number; id: string; difficulty?: string; result: string; correct: number; incorrect: number }[]>([]);
 
     const calculateStats = () => {
         if (!games || games.length === 0) {
@@ -51,7 +52,10 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
                 winRate: 0,
                 avgSolveTime: 0, 
                 gamesByDifficulty: [],
+                bestSolveTimePerDifficulty: {},
                 winLossData: [],
+                actionsPerGameChartData: [],
+                correctIncorrectActionsPerGameChartData: [],
             };
         }
 
@@ -61,9 +65,10 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
         let completedGamesCount = 0;
         const totalSolveTimePerDifficulty: Record<string, number> = {};
         const difficultyCounts: Record<string, {played: number, wins: number}> = {};
+        const bestSolveTimePerDifficulty: Record<string, number> = {};
 
  games.forEach(game => {
-            if (game.result === 'won') {
+            if (game.result === 'won') { 
                 wins++;
             } else if (game.result === 'lost') {
                 losses++;
@@ -72,9 +77,15 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
             // For games that are won or lost and have time data
             if ((game.result === 'won' || game.result === 'lost') && game.endTime && game.startTime) {
                 totalSolveTime += (game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000;
-                completedGamesCount++;
-            }
+                const solveTime = (game.endTime.toDate().getTime() - game.startTime.toDate().getTime()) / 1000;
+                completedGamesCount++; // Count games that are won or lost
 
+                if (game.difficulty) {
+                    if (!bestSolveTimePerDifficulty[game.difficulty] || solveTime < bestSolveTimePerDifficulty[game.difficulty]) {
+                        bestSolveTimePerDifficulty[game.difficulty] = solveTime;
+                    }
+                }
+            }
             // Update difficulty counts for games with a difficulty
             if (game.difficulty) {
                 if (!difficultyCounts[game.difficulty]) difficultyCounts[game.difficulty] = { played: 0, wins: 0 };
@@ -117,13 +128,30 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
             }
         });
 
+        const formattedBestSolveTimePerDifficulty: Record<string, string> = {};
+        Object.keys(bestSolveTimePerDifficulty).forEach(difficulty => {
+            const durationInSeconds = Math.round(bestSolveTimePerDifficulty[difficulty]);
+             if (durationInSeconds >= 60) {
+                const minutes = Math.floor(durationInSeconds / 60);
+                const seconds = durationInSeconds % 60;
+                formattedBestSolveTimePerDifficulty[difficulty] = `${minutes}m ${seconds}s`;
+             } else {
+                formattedBestSolveTimePerDifficulty[difficulty] = `${durationInSeconds}s`;
+             }
+        });
+
+
         const gamesByDifficulty = Object.entries(difficultyCounts).map(([name, data]) => ({
             name, played: data.played, wins: data.wins, avgSolveTime: avgSolveTimePerDifficulty[name] || 'N/A'
         }));
-        
+
         const actionsPerGameData: { id: string; difficulty?: string; result: string; actions: number }[] = [];
+        const correctIncorrectActionsPerGameData: { index: number; id: string; difficulty?: string; result: string; correct: number; incorrect: number }[] = [];
+        let completedGameIndex = 0;
+
         games.forEach(game => {
             if ((game.result === 'won' || game.result === 'lost') && game.moves) {
+                completedGameIndex++;
                 actionsPerGameData.push({
                     id: game.id,
                     difficulty: game.difficulty,
@@ -135,6 +163,19 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
 
         // Sort actionsPerGameData by the number of actions for potentially better visualization
         actionsPerGameData.sort((a, b) => a.actions - b.actions);
+
+        games.filter(game => game.result === 'won' || game.result === 'lost').forEach((game, index) => {
+            const correctMoves = game.moves?.filter(move => move.correct === true).length || 0;
+            const incorrectMoves = game.moves?.filter(move => move.correct === false).length || 0;
+            correctIncorrectActionsPerGameData.push({
+                index: index + 1,
+                id: game.id,
+                difficulty: game.difficulty,
+                result: (game.result) ? game.result : '' ,
+                correct: correctMoves,
+                incorrect: incorrectMoves,
+            });
+        });
 
         // Prepare data for actions per game chart - using index for X-axis for simplicity
         const actionsPerGameChartData = actionsPerGameData.map((game, index) => ({
@@ -151,13 +192,23 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
             { name: 'Losses', value: losses, fill: 'hsl(var(--chart-3))' }, // Gold-like
         ];
 
-        return { gamesPlayed, wins, losses, winRate, avgSolveTime, gamesByDifficulty, winLossData, avgSolveTimePerDifficulty, actionsPerGameChartData };
+        return {
+            gamesPlayed,
+            wins,
+            losses,
+            winRate,
+            avgSolveTime,
+            gamesByDifficulty,
+            winLossData,
+            avgSolveTimePerDifficulty,
+            bestSolveTimePerDifficulty: formattedBestSolveTimePerDifficulty, actionsPerGameChartData, correctIncorrectActionsPerGameData };
     };
 
     useEffect(() => {
         if (games) {
-            const { actionsPerGameChartData } = calculateStats();
+            const { actionsPerGameChartData, correctIncorrectActionsPerGameChartData } = calculateStats();
             setActionsPerGameChartData(actionsPerGameChartData ?? []);
+            setCorrectIncorrectActionsPerGameChartData(correctIncorrectActionsPerGameChartData ?? []);
         }
     }, [games]);
 
@@ -166,7 +217,7 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
         'users',
         targetUserId, // Fetch data for the determined targetUserId
         UserSchema,
-    );
+ );
     const stats = calculateStats(); // Calculate stats initially and on games change
      
     const chartConfig = {
@@ -195,7 +246,7 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
                 </Button>
             )}
             {authLoading ? (
-                 <div className="space-y-6">
+ <div className="space-y-6">
                     <Skeleton className="h-10 w-1/3 mb-4" />
                     <Skeleton className="h-40 w-full rounded-lg" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -247,7 +298,7 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
                  )}
 
                  {!gamesLoading && !gamesError && (
-                    <div className="space-y-6">
+ <div className="space-y-6">
                          <Card>
                              <CardHeader>
                                  <CardTitle>Overall Performance</CardTitle>
@@ -284,7 +335,7 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
                          </Card>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <Card>
+ <Card>
                                 <CardHeader>
                                     <CardTitle>Win/Loss Ratio</CardTitle>
                                 </CardHeader>
@@ -307,7 +358,7 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
                                     </ChartContainer>
                                     )}
                                 </CardContent>
-                            </Card>
+ </Card>
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Games by Difficulty</CardTitle>
@@ -328,25 +379,75 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
                                     </ChartContainer>
                                     )}
                                 </CardContent>
-                            </Card>
+ </Card>
                             {/* Average Solve Time by Difficulty */}
-                            {stats.avgSolveTimePerDifficulty && Object.keys(stats.avgSolveTimePerDifficulty).length > 0 && (
+ {stats.avgSolveTimePerDifficulty && Object.keys(stats.avgSolveTimePerDifficulty).length > 0 && (
                                  <Card>
                                     <CardHeader>
-                                        <CardTitle>Average Solve Time by Difficulty</CardTitle>
+                                        <CardTitle>Solve Times by Difficulty</CardTitle>
                                     </CardHeader>
                                     <CardContent>
                                         <ul className="space-y-2">
                                             {Object.entries(stats.avgSolveTimePerDifficulty).map(([difficulty, avgTime]) => (
                                                 <li key={difficulty} className="flex justify-between items-center">
-                                                    <span className="font-medium">{difficulty}:</span>
+                                                    <span className="font-medium">{difficulty} Average:</span>
                                                     <span>{avgTime}</span>
+                                                </li>
+                                            ))}
+                                            {Object.entries(stats.bestSolveTimePerDifficulty).map(([difficulty, bestTime]) => (
+                                                <li key={`${difficulty}-best`} className="flex justify-between items-center text-sm text-muted-foreground">
+                                                    <span className="font-medium">{difficulty} Best:</span>
+                                                    <span>{bestTime}</span>
                                                 </li>
                                             ))}
                                         </ul>
                                     </CardContent>
                                  </Card>
-                            )}
+ )}
+                            {/* Actions per Game Chart */}
+                            {actionsPerGameChartData.length > 0 && (
+ <Card>
+ <CardHeader>
+ <CardTitle>Actions Per Game</CardTitle>
+ <CardDescription>Total actions (clicks/flags) taken in each completed game.</CardDescription>
+ </CardHeader>
+ <CardContent>
+ <ChartContainer config={{ actions: { label: 'Actions', color: 'hsl(var(--chart-2))' } }} className="h-[300px] w-full">
+ <BarChart data={actionsPerGameChartData}>
+ <CartesianGrid vertical={false} />
+ <XAxis dataKey="index" tickLine={false} tickMargin={10} axisLine={false} />
+ <YAxis />
+ <ChartTooltip content={<ChartTooltipContent />} />
+ <RechartsBar dataKey="actions" fill="var(--color-actions)" radius={4} />
+ </BarChart>
+ </ChartContainer>
+ </CardContent>
+ </Card>
+ )}
+
+ {/* Correct/Incorrect Actions per Game Chart */}
+                            {correctIncorrectActionsPerGameChartData.length > 0 && (
+ <Card>
+<CardHeader>
+<CardTitle>Correct vs. Incorrect Actions</CardTitle>
+<CardDescription>Correct (reveal/flag) vs. Incorrect actions in each completed game.</CardDescription>
+</CardHeader>
+<CardContent>
+<ChartContainer config={{ correct: { label: 'Correct', color: 'hsl(var(--chart-1))' }, incorrect: { label: 'Incorrect', color: 'hsl(var(--chart-3))' } }} className="h-[300px] w-full">
+<BarChart data={correctIncorrectActionsPerGameChartData}>
+<CartesianGrid vertical={false} />
+<XAxis dataKey="index" tickLine={false} tickMargin={10} axisLine={false} />
+<YAxis />
+<ChartTooltip content={<ChartTooltipContent />} />
+<RechartsBar dataKey="correct" fill="var(--color-correct)" stackId="a" radius={[4, 4, 0, 0]} /> {/* Stacked bars */}
+<RechartsBar dataKey="incorrect" fill="var(--color-incorrect)" stackId="a" radius={[0, 0, 4, 4]} /> {/* Stacked bars */}
+</BarChart>
+</ChartContainer>
+</CardContent>
+</Card>
+ )}
+
+                            
                         </div>
                     </div>
                  )}

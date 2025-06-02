@@ -264,12 +264,102 @@ export default function PlayPage() {
     }
   };
 
+  function handleMoveCorrection(x: number, y: number): boolean {
+    if (!gameBoardRef.current) return false;
+    var oldGameState = gameBoardRef.current.getCurrentBoardState(); 
+    if (!oldGameState) return false;
+    const gameState = JSON.parse(oldGameState);
+  
+    // Build a 2D grid for easier access
+    const boardMap = new Map<string, typeof gameState[0]>();
+    let maxX = 0;
+    let maxY = 0;
+  
+    for (const row of gameState) {
+      for (const cell of row) {
+        boardMap.set(`${cell.x},${cell.y}`, cell);
+        if (cell.x > maxX) maxX = cell.x;
+        if (cell.y > maxY) maxY = cell.y;
+      }
+    }
+  
+    const getCell = (x: number, y: number) => boardMap.get(`${x},${y}`);
+  
+    const targetCell = getCell(x, y);
+    console.log(targetCell);
+    console.log(x, y);
+    if (!targetCell || targetCell.isRevealed || targetCell.isFlagged) return false;
+
+    const directions = [-1, 0, 1];
+  
+    for (let dx of directions) {
+      for (let dy of directions) {
+        if (dx === 0 && dy === 0) continue;
+  
+        const nx = x + dx;
+        const ny = y + dy;
+        const neighbor = getCell(nx, ny);
+  
+        if (!neighbor || !neighbor.isRevealed || neighbor.adjacentMines === 0) continue;
+  
+        let flaggedCount = 0;
+        let coveredCells: typeof gameState[0][] = [];
+  
+        for (let ddx of directions) {
+          for (let ddy of directions) {
+            const ax = nx + ddx;
+            const ay = ny + ddy;
+            if (ax < 0 || ax > maxX || ay < 0 || ay > maxY) continue;
+  
+            const adj = getCell(ax, ay);
+            if (!adj || (ddx === 0 && ddy === 0)) continue;
+  
+            if (adj.isFlagged) flaggedCount++;
+            else if (!adj.isRevealed) coveredCells.push(adj);
+          }
+        }
+  
+        const minesLeft = neighbor.adjacentMines - flaggedCount;
+        
+        // ✅ Case 1: All remaining mines are flagged → remaining covered cells are safe
+        if (minesLeft === 0) {
+          if (coveredCells.some(cell => cell.x === x && cell.y === y)) {
+            return true;
+          }
+        }
+        
+        // ❌ Case 2: All covered cells are mines → current cell must be a mine → incorrect move
+        if (minesLeft === coveredCells.length) {
+          if (coveredCells.some(cell => cell.x === x && cell.y === y)) {
+            return false;
+          }
+        }
+  
+        // Otherwise, we cannot determine certainty from this neighbor
+      }
+    }
+  
+    // No certainty found from any adjacent revealed numbers
+    return false;
+  }
+  
+
   const handleMoveMade = useCallback(async (moveType: 'reveal' | 'flag' | 'unflag', x: number, y: number) => {
     if (!user || !activeGameIdRef.current || !firestore) {
       return;
     }
     const gameDocRef = doc(firestore, 'games', activeGameIdRef.current);
-    const move = { action: moveType, x, y, timestamp: Timestamp.now() };
+    var correctMove = true;
+
+    if (moveType === 'reveal') {
+      correctMove = handleMoveCorrection(x,y);
+    } else {
+      correctMove = !handleMoveCorrection(x,y);
+    }
+    console.log("CORRECT");
+    console.log(correctMove);
+
+    const move = { action: moveType, x, y, timestamp: Timestamp.now(), correct: correctMove };
     try {
       if (x >= 0 && y >= 0) {
         await updateDoc(gameDocRef, { moves: arrayUnion(move) });

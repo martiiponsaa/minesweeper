@@ -9,7 +9,10 @@
     pkgs.zulu
   ];
   # Sets environment variables in the workspace
-  env = {};
+  env = {
+    GEMINI_API_KEY = "AIzaSyCxX3a5JvGLVnLo2kW5rPS_muAVYtzTTzM"; # Replace with your API key
+  
+  };
   # processes = {
   #   start-emulators = {
   #     command = "firebase experiments:enable emulatoruisnapshot && npx -y firebase-tools@14.2.2 emulators:start --only firestore,auth";

@@ -105,6 +105,10 @@
               "y": {
                 "type": "integer",
                 "description": "The Y coordinate of the move."
+              },
+              "correct": {
+                "type": "integer",
+                "description": "The Y coordinate of the move."
               }
             },
             "required": [

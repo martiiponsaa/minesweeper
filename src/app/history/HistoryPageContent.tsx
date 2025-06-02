@@ -352,7 +352,7 @@ const GameStatusIcon = ({ result }: { result: Game['result'] }) => {
                                 }
                                 // For 'in-progress' or 'continue' games, only show if it's the current user's own game OR if viewing other's history and they allow it (future enhancement)
                                 // For now, show all 'in-progress' or 'continue' for the target user
-                                if (game.result === 'in-progress' || game.result === 'continue') {
+                                if ((game.result === 'in-progress' || game.result === 'continue' || game.result === 'Paused')) {
                                     return isTargetUserGame;
                                 }
                                 return false; // Default to not showing if none of above conditions met
