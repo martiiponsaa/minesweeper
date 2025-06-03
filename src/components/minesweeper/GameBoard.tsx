@@ -385,14 +385,18 @@ const GameBoard = forwardRef<GameBoardRef, GameBoardProps>(({
   };
 
   const getGridStyle = () => {
-    let cellSize = "minmax(20px, 1fr)";
-    if (difficulty.cols <= 10 && difficulty.rows <=10) cellSize = "minmax(28px, 1fr)";
-    else if (difficulty.cols > 20 || difficulty.rows > 20) cellSize = "minmax(18px, 1fr)";
-    if (difficulty.cols > 25 || difficulty.rows > 25) cellSize = "minmax(16px, 1fr)";
-
+    const maxCellSize = 20; // in px, adjust as needed
+    const gridWidth = difficulty.cols * maxCellSize;
+    const gridHeight = difficulty.rows * maxCellSize;
+  
+    
     return {
-      gridTemplateColumns: `repeat(${difficulty.cols}, ${cellSize})`,
-      maxWidth: `${difficulty.cols * 40}px`,
+      display: 'grid',
+      gridTemplateColumns: `repeat(${difficulty.cols}, 1fr)`,
+      width: `${gridWidth+10}px`,
+      heigth: `${gridHeight}px`,
+      overflowX: `hidden` as const,
+      overflowY: `hidden` as const,
     };
   };
 

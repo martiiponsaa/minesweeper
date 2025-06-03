@@ -305,7 +305,7 @@ function GameReviewContent() {
     console.log("Combined userMessage (sent to AI):", userMessage.substring(0, 150) + '...'); // Log start of combined string
 
     // Add /home/user/studio/src/app/loginthe combined message to UI state
-    setMessages((prevMessages) => [...prevMessages, { text: userMessage, sender: 'user' }]);
+    setMessages((prevMessages) => [...prevMessages, { text: newMessage, sender: 'user' }]);
     console.log("Combined message added to UI state.");
 
     setNewMessage(''); // Clear input field
