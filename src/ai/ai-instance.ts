@@ -5,8 +5,10 @@ export const ai = genkit({
   promptDir: './prompts',
   plugins: [
     googleAI({
-      apiKey: process.env.GEMINI_API_KEY
+      apiKey: "AIzaSyCxX3a5JvGLVnLo2kW5rPS_muAVYtzTTzM",
+      // apiKey: 
     }),
   ],
   model: 'googleai/gemini-2.0-flash',
 });
+

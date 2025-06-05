@@ -10,7 +10,7 @@
   ];
   # Sets environment variables in the workspace
   env = {
-    GEMINI_API_KEY = "AIzaSyCxX3a5JvGLVnLo2kW5rPS_muAVYtzTTzM"; # Replace with your API key
+    gemini_api_key = "AIzaSyCxX3a5JvGLVnLo2kW5rPS_muAVYtzTTzM"; # Replace with your API key
   
   };
   # processes = {

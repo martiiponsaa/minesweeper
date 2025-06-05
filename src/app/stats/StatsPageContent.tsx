@@ -88,10 +88,8 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
             }
             // Update difficulty counts for games with a difficulty
             if (game.difficulty) {
+                
                 if (!difficultyCounts[game.difficulty]) difficultyCounts[game.difficulty] = { played: 0, wins: 0 };
-                if (game.endTime && game.startTime) { 
-                    difficultyCounts[game.difficulty] = { played: 0, wins: 0 };
-                }
                 difficultyCounts[game.difficulty].played++;
                 if (game.result === 'won') {
                     difficultyCounts[game.difficulty].wins++;
@@ -114,7 +112,7 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
         Object.keys(difficultyCounts).forEach(difficulty => {
             const gamesPlayedAtDifficulty = difficultyCounts[difficulty].played;
             const totalTime = totalSolveTimePerDifficulty[difficulty] || 0;
-            if (gamesPlayedAtDifficulty > 0 && completedGamesCount > 0) { // Added completedGamesCount check here
+            if (gamesPlayedAtDifficulty > 0) { // Added completedGamesCount check here
                  const durationInSeconds = Math.round(totalTime / gamesPlayedAtDifficulty); // Corrected variable
                  if (durationInSeconds >= 60) {
                     const minutes = Math.floor(durationInSeconds / 60);
@@ -206,9 +204,9 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
 
     useEffect(() => {
         if (games) {
-            const { actionsPerGameChartData, correctIncorrectActionsPerGameChartData } = calculateStats();
+            const { actionsPerGameChartData, correctIncorrectActionsPerGameData } = calculateStats();
             setActionsPerGameChartData(actionsPerGameChartData ?? []);
-            setCorrectIncorrectActionsPerGameChartData(correctIncorrectActionsPerGameChartData ?? []);
+            setCorrectIncorrectActionsPerGameChartData(correctIncorrectActionsPerGameData ?? []);
         }
     }, [games]);
 
@@ -405,7 +403,7 @@ import { useFirestoreCollection } from '@/hooks/useFirestoreCollection';
                                  </Card>
  )}
                             {/* Actions per Game Chart */}
-                            {actionsPerGameChartData.length > 0 && (
+                            {actionsPerGameChartData.length > 0 && false && (
  <Card>
  <CardHeader>
  <CardTitle>Actions Per Game</CardTitle>

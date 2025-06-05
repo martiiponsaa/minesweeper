@@ -292,7 +292,7 @@ function GameReviewContent() {
                         + "The board is structured in row-major order: each sub-array is a row, and each element in that row is a cell. Here's the current state of the board:"
                         + JSON.stringify(apiFriendlyBoard)  
                         + "\nMy moves are the following\n"
-                        + movesString;
+                        + JSON.stringify(movesString);
                         setInitialPromptSent(true);
       
       } 
