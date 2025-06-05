@@ -1,5 +1,7 @@
 # Firebase Studio
 
+https://free-online-minesweeper.web.app/dashboard 
+
 # MineVerse
 
 MineVerse is a web-based Minesweeper game with added features for user profiles, game history, statistics, friendships, and AI assistance for game review. It utilizes Next.js, React, Firebase for backend services (authentication, Firestore database), and Genkit with Google AI for AI features.
